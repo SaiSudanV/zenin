@@ -1,6 +1,7 @@
 /*
  * Project Zenin - Kernel Main (kmain)
- * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, and AI Intent Dispatcher
+ * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, AI Engine,
+ * and Universal Multi-OS Execution (Linux, Windows, Android, macOS).
  */
 
 #include "../include/uart.h"
@@ -9,6 +10,7 @@
 #include "../include/zbus.h"
 #include "../include/fb.h"
 #include "../include/ai_core.h"
+#include "../include/compat.h"
 
 extern char __kernel_end;
 
@@ -68,10 +70,9 @@ void kmain(void) {
     /* 5. Initialize Native AI Engine & Context Aggregator */
     uart_puts("\n[zenin-ai] Initializing Native AI Intent & Context Engine...\n");
     zenin_ai_init();
-
     zenin_system_context_t ctx;
     zenin_ai_get_context(&ctx);
-    uart_puts("[zenin-ai] System Context Snapshot: Battery ");
+    uart_puts("[zenin-ai] Context: Battery ");
     print_dec(ctx.battery_percent);
     uart_puts("% | Free RAM ");
     print_dec(ctx.free_ram_mb);
@@ -79,26 +80,34 @@ void kmain(void) {
     print_dec(ctx.cpu_clock_mhz);
     uart_puts(" MHz\n");
 
-    /* Test Natural Language User Prompt -> Hardware Action */
-    const char *user_prompt = "Hey Zenin, launch a windows game with turbo mode";
-    uart_puts("[zenin-ai] Processing User Intent: '");
-    uart_puts(user_prompt);
-    uart_puts("'\n");
+    /* 6. Universal Multi-OS Application Execution Tests */
+    uart_puts("\n[zenin-compat] Initializing Universal Multi-OS Subsystem...\n");
+    compat_launcher_init();
 
-    zenin_ai_action_t resolved = zenin_ai_resolve_intent(user_prompt);
-    if (resolved == AI_ACTION_TURBO_GAME_MODE) {
-        uart_puts("[zenin-ai] Intent Resolved: AI_ACTION_TURBO_GAME_MODE! Dispatching over Z-Bus...\n");
-        zenin_ai_dispatch_action(resolved);
+    const char *test_apps[] = {
+        "/bin/terminal_tool.elf",
+        "/games/cyberpunk.exe",
+        "/apps/whatsapp.apk",
+        "/tools/darwin_compiler.macho"
+    };
 
-        zbus_message_t msg;
-        if (zbus_poll(&msg)) {
-            uart_puts("[zenin-zbus] Hardware Action Triggered: ");
-            uart_puts((const char *)msg.payload);
+    for (int i = 0; i < 4; i++) {
+        zenin_app_process_t proc;
+        if (compat_launch_app(test_apps[i], &proc)) {
+            uart_puts("[zenin-compat] Launched: ");
+            uart_puts(test_apps[i]);
+            uart_puts(" -> Type: ");
+            uart_puts(proc.format_name);
+            uart_puts(" | Runtime: ");
+            uart_puts(proc.runtime_subsystem);
             uart_puts("\n");
+
+            /* Terminate and verify zero-leak memory reclamation */
+            compat_terminate_app(&proc);
         }
     }
 
-    uart_puts("\n[zenin-core] AI-First Kernel Operational! Entering 0.0% idle WFI sleep.\n");
+    uart_puts("\n[zenin-core] Complete 4-Phase System Operational! Entering 0.0% idle WFI sleep.\n");
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {
