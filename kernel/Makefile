@@ -6,8 +6,8 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53
 LDFLAGS = -T arch/aarch64/link.ld -nostdlib
 
-SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c
-OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o
+SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c sys/compat_launcher.c sys/abi_shim.c
+OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o
 
 all: zenin-kernel.elf zenin-kernel.bin
 
@@ -39,6 +39,12 @@ ai/neural_core.o: ai/neural_core.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 sys/shell.o: sys/shell.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/compat_launcher.o: sys/compat_launcher.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/abi_shim.o: sys/abi_shim.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 zenin-kernel.elf: $(OBJS)
