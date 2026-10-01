@@ -1,6 +1,6 @@
 /*
  * Project Zenin - Kernel Main (kmain)
- * Demonstrating Bare-Metal Boot, PMM, Dynamic Heap, Z-Bus, and Direct Display Framebuffer
+ * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, and AI Intent Dispatcher
  */
 
 #include "../include/uart.h"
@@ -8,6 +8,7 @@
 #include "../include/kheap.h"
 #include "../include/zbus.h"
 #include "../include/fb.h"
+#include "../include/ai_core.h"
 
 extern char __kernel_end;
 
@@ -52,27 +53,52 @@ void kmain(void) {
     /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
     uart_puts("[zenin-zbus] Initializing Z-Bus Zero-Copy Event Mesh...\n");
     zbus_init();
-    zbus_publish(1, 2, ZBUS_MSG_AI_INTENT, "INTENT_TURBO_GAME_MODE", 22);
-
-    zbus_message_t msg;
-    if (zbus_poll(&msg)) {
-        uart_puts("[zenin-zbus] Event processed: ");
-        uart_puts((const char *)msg.payload);
-        uart_puts("\n");
-    }
 
     /* 4. Initialize Universal Direct Framebuffer (Display Engine) */
-    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer (1080x2400 Mobile Native)...\n");
+    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer (1080x2400)...\n");
     void *vram_buffer = kmalloc(1080 * 2400 * sizeof(uint32_t));
     if (vram_buffer) {
         fb_init(1080, 2400, vram_buffer);
         fb_clear(FB_COLOR_BLACK);
         fb_fill_rect(240, 600, 600, 200, FB_COLOR_ZENIN);
-        uart_puts("[zenin-display] Framebuffer rendered 32-bit ARGB scanout buffer successfully!\n");
+        uart_puts("[zenin-display] Framebuffer scanout buffer active!\n");
         kfree(vram_buffer);
     }
 
-    uart_puts("\n[zenin-core] Foundation Layer Complete! Entering 0.0% idle WFI sleep.\n");
+    /* 5. Initialize Native AI Engine & Context Aggregator */
+    uart_puts("\n[zenin-ai] Initializing Native AI Intent & Context Engine...\n");
+    zenin_ai_init();
+
+    zenin_system_context_t ctx;
+    zenin_ai_get_context(&ctx);
+    uart_puts("[zenin-ai] System Context Snapshot: Battery ");
+    print_dec(ctx.battery_percent);
+    uart_puts("% | Free RAM ");
+    print_dec(ctx.free_ram_mb);
+    uart_puts(" MB | CPU ");
+    print_dec(ctx.cpu_clock_mhz);
+    uart_puts(" MHz\n");
+
+    /* Test Natural Language User Prompt -> Hardware Action */
+    const char *user_prompt = "Hey Zenin, launch a windows game with turbo mode";
+    uart_puts("[zenin-ai] Processing User Intent: '");
+    uart_puts(user_prompt);
+    uart_puts("'\n");
+
+    zenin_ai_action_t resolved = zenin_ai_resolve_intent(user_prompt);
+    if (resolved == AI_ACTION_TURBO_GAME_MODE) {
+        uart_puts("[zenin-ai] Intent Resolved: AI_ACTION_TURBO_GAME_MODE! Dispatching over Z-Bus...\n");
+        zenin_ai_dispatch_action(resolved);
+
+        zbus_message_t msg;
+        if (zbus_poll(&msg)) {
+            uart_puts("[zenin-zbus] Hardware Action Triggered: ");
+            uart_puts((const char *)msg.payload);
+            uart_puts("\n");
+        }
+    }
+
+    uart_puts("\n[zenin-core] AI-First Kernel Operational! Entering 0.0% idle WFI sleep.\n");
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {
