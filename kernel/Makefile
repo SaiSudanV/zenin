@@ -1,0 +1,27 @@
+CROSS_COMPILE ?= aarch64-linux-gnu-
+CC = $(CROSS_COMPILE)gcc
+LD = $(CROSS_COMPILE)ld
+OBJCOPY = $(CROSS_COMPILE)objcopy
+
+CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53
+LDFLAGS = -T arch/aarch64/link.ld -nostdlib
+
+SRCS = arch/aarch64/boot.S sys/kmain.c
+OBJS = arch/aarch64/boot.o sys/kmain.o
+
+all: zenin-kernel.elf zenin-kernel.bin
+
+arch/aarch64/boot.o: arch/aarch64/boot.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/kmain.o: sys/kmain.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+zenin-kernel.elf: $(OBJS)
+	$(LD) $(LDFLAGS) $(OBJS) -o $@
+
+zenin-kernel.bin: zenin-kernel.elf
+	$(OBJCOPY) -O binary $< $@
+
+clean:
+	rm -f $(OBJS) zenin-kernel.elf zenin-kernel.bin
