@@ -1,7 +1,7 @@
 /*
  * Project Zenin - Universal Low-Memory 3D Graphics Engine (Z-GL) Implementation
  * High-speed triangle rasterizer, depth buffer, and multi-OS graphics translator.
- * Zero dynamic memory leaks, optimized for 1.0 GHz ARM Cortex-A53.
+ * Uses 100% integer calculations for screen coordinates to guarantee 0 FP traps.
  */
 
 #include "../include/zgl.h"
@@ -49,12 +49,12 @@ void zgl_draw_triangle(const zgl_vertex_t *v0, const zgl_vertex_t *v1, const zgl
     if (!v0 || !v1 || !v2 || !zgl_depth_buffer) return;
 
     /* Screen space coordinates */
-    int32_t x0 = (int32_t)v0->x;
-    int32_t y0 = (int32_t)v0->y;
-    int32_t x1 = (int32_t)v1->x;
-    int32_t y1 = (int32_t)v1->y;
-    int32_t x2 = (int32_t)v2->x;
-    int32_t y2 = (int32_t)v2->y;
+    int32_t x0 = v0->x;
+    int32_t y0 = v0->y;
+    int32_t x1 = v1->x;
+    int32_t y1 = v1->y;
+    int32_t x2 = v2->x;
+    int32_t y2 = v2->y;
 
     /* Bounding box calculation with screen clamp */
     int32_t min_x = (x0 < x1) ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2);
@@ -71,23 +71,25 @@ void zgl_draw_triangle(const zgl_vertex_t *v0, const zgl_vertex_t *v1, const zgl
     if (area == 0) return; /* Backface or degenerate */
 
     uint16_t tri_color = v0->color ? v0->color : FB_COLOR_ZENIN_16;
+    uint16_t depth = (v0->depth + v1->depth + v2->depth) / 3;
 
-    /* Rasterize bounding box pixels using barycentric coordinates */
+    /* Direct rasterization into framebuffer */
+    const zenin_framebuffer_t *fb = fb_get_info();
+    uint16_t *vram16 = (uint16_t *)fb->buffer;
+    if (!vram16) return;
+
     for (int32_t y = min_y; y <= max_y; y++) {
+        size_t row_offset = y * zgl_w;
         for (int32_t x = min_x; x <= max_x; x++) {
             int32_t w0 = edge_cross(x1, y1, x2, y2, x, y);
             int32_t w1 = edge_cross(x2, y2, x0, y0, x, y);
             int32_t w2 = edge_cross(x0, y0, x1, y1, x, y);
 
-            /* Check if point is inside triangle */
             if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0)) {
-                /* Depth interpolation */
-                uint16_t depth = (uint16_t)((v0->z + v1->z + v2->z) * 1000.0f);
-                size_t offset = y * zgl_w + x;
-
+                size_t offset = row_offset + x;
                 if (depth < zgl_depth_buffer[offset]) {
                     zgl_depth_buffer[offset] = depth;
-                    fb_draw_pixel(x, y, tri_color);
+                    vram16[offset] = tri_color;
                 }
             }
         }
@@ -106,5 +108,5 @@ void zgl_dispatch_draw_elements(uint32_t count, const zgl_triangle_t *triangles)
 void zgl_get_metrics(uint32_t *out_fps, uint32_t *out_poly_count, size_t *out_vram_kb) {
     if (out_fps) *out_fps = 60;
     if (out_poly_count) *out_poly_count = rendered_polys;
-    if (out_vram_kb) *out_vram_kb = (zgl_w * zgl_h * sizeof(uint16_t) * 2) / 1024; /* Color + Depth buffer */
+    if (out_vram_kb) *out_vram_kb = (zgl_w * zgl_h * sizeof(uint16_t) * 2) / 1024;
 }

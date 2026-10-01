@@ -3,11 +3,11 @@ CC = $(CROSS_COMPILE)gcc
 LD = $(CROSS_COMPILE)ld
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
-CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53
+CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only
 LDFLAGS = -T arch/aarch64/link.ld -nostdlib
 
-SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/zgl.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c sys/compat_launcher.c sys/abi_shim.c
-OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/zgl.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o
+SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/zgl.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c sys/compat_launcher.c sys/abi_shim.c sys/zpkg.c
+OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/zgl.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o sys/zpkg.o
 
 all: zenin-kernel.elf zenin-kernel.bin
 
@@ -48,6 +48,9 @@ sys/compat_launcher.o: sys/compat_launcher.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 sys/abi_shim.o: sys/abi_shim.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/zpkg.o: sys/zpkg.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 zenin-kernel.elf: $(OBJS)
