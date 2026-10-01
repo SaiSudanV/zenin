@@ -1,0 +1,36 @@
+name: Build Zenith Universal GSI
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_arch:
+        description: 'Target Architecture (e.g. arm64-ab, arm-ab)'
+        required: true
+        default: 'arm64-ab'
+      include_microg:
+        description: 'Include MicroG Services'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Project Zenith
+        uses: actions/checkout@v4
+
+      - name: Set up Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip android-sdk-platform-tools libarchive-tools e2tools
+
+      - name: Free Disk Space on Runner
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          df -h
+
+      - name: Build / Patch Zenith Image
+        run: |
+          python3 tools/kitchen.py --help

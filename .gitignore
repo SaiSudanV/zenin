@@ -1,0 +1,25 @@
+# Build and temporary files
+*.img
+*.simg
+*.raw
+*.tar
+*.zip
+*.7z
+out/
+build/
+dist/
+temp/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
