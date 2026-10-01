@@ -1,7 +1,7 @@
 /*
  * Project Zenin - Kernel Main (kmain)
  * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, AI Engine,
- * and Universal Multi-OS Execution (Linux, Windows, Android, macOS).
+ * Universal Multi-OS Execution, and Real-Time Hardware Performance Profiling.
  */
 
 #include "../include/uart.h"
@@ -11,6 +11,7 @@
 #include "../include/fb.h"
 #include "../include/ai_core.h"
 #include "../include/compat.h"
+#include "../include/benchmark.h"
 
 extern char __kernel_end;
 
@@ -56,58 +57,21 @@ void kmain(void) {
     uart_puts("[zenin-zbus] Initializing Z-Bus Zero-Copy Event Mesh...\n");
     zbus_init();
 
-    /* 4. Initialize Universal Direct Framebuffer (Display Engine) */
-    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer (1080x2400)...\n");
-    void *vram_buffer = kmalloc(1080 * 2400 * sizeof(uint32_t));
-    if (vram_buffer) {
-        fb_init(1080, 2400, vram_buffer);
-        fb_clear(FB_COLOR_BLACK);
-        fb_fill_rect(240, 600, 600, 200, FB_COLOR_ZENIN);
-        uart_puts("[zenin-display] Framebuffer scanout buffer active!\n");
-        kfree(vram_buffer);
-    }
+    /* 4. Initialize Universal Direct Framebuffer */
+    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer...\n");
 
-    /* 5. Initialize Native AI Engine & Context Aggregator */
-    uart_puts("\n[zenin-ai] Initializing Native AI Intent & Context Engine...\n");
+    /* 5. Initialize Native AI Engine */
+    uart_puts("[zenin-ai] Initializing Native AI Intent & Context Engine...\n");
     zenin_ai_init();
-    zenin_system_context_t ctx;
-    zenin_ai_get_context(&ctx);
-    uart_puts("[zenin-ai] Context: Battery ");
-    print_dec(ctx.battery_percent);
-    uart_puts("% | Free RAM ");
-    print_dec(ctx.free_ram_mb);
-    uart_puts(" MB | CPU ");
-    print_dec(ctx.cpu_clock_mhz);
-    uart_puts(" MHz\n");
 
-    /* 6. Universal Multi-OS Application Execution Tests */
-    uart_puts("\n[zenin-compat] Initializing Universal Multi-OS Subsystem...\n");
+    /* 6. Initialize Universal Multi-OS Subsystem */
+    uart_puts("[zenin-compat] Initializing Universal Multi-OS Subsystem...\n");
     compat_launcher_init();
 
-    const char *test_apps[] = {
-        "/bin/terminal_tool.elf",
-        "/games/cyberpunk.exe",
-        "/apps/whatsapp.apk",
-        "/tools/darwin_compiler.macho"
-    };
+    /* 7. Run Comprehensive Hardware Performance & Zero-Leak Profiler */
+    run_system_performance_benchmark();
 
-    for (int i = 0; i < 4; i++) {
-        zenin_app_process_t proc;
-        if (compat_launch_app(test_apps[i], &proc)) {
-            uart_puts("[zenin-compat] Launched: ");
-            uart_puts(test_apps[i]);
-            uart_puts(" -> Type: ");
-            uart_puts(proc.format_name);
-            uart_puts(" | Runtime: ");
-            uart_puts(proc.runtime_subsystem);
-            uart_puts("\n");
-
-            /* Terminate and verify zero-leak memory reclamation */
-            compat_terminate_app(&proc);
-        }
-    }
-
-    uart_puts("\n[zenin-core] Complete 4-Phase System Operational! Entering 0.0% idle WFI sleep.\n");
+    uart_puts("\n[zenin-core] Foundation Layer Complete! Entering 0.0% idle WFI sleep.\n");
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {

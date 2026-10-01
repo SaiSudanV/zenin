@@ -6,8 +6,8 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53
 LDFLAGS = -T arch/aarch64/link.ld -nostdlib
 
-SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c ai/intent_engine.c sys/compat_launcher.c
-OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o ai/intent_engine.o sys/compat_launcher.o
+SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c ai/intent_engine.c sys/compat_launcher.c sys/benchmark.c
+OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o ai/intent_engine.o sys/compat_launcher.o sys/benchmark.o
 
 all: zenin-kernel.elf zenin-kernel.bin
 
@@ -33,6 +33,9 @@ ai/intent_engine.o: ai/intent_engine.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 sys/compat_launcher.o: sys/compat_launcher.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/benchmark.o: sys/benchmark.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 zenin-kernel.elf: $(OBJS)
