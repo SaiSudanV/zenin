@@ -54,11 +54,11 @@ void kmain(void) {
     /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
     zbus_init();
 
-    /* 4. Initialize Universal Direct Framebuffer (720x1280 Mobile View) */
-    uart_puts("[zenin-display] Initializing Direct Framebuffer (720x1280)...\n");
-    void *vram_buffer = kmalloc(720 * 1280 * sizeof(uint32_t));
+    /* 4. Initialize Universal Direct Framebuffer (720x1280 Extreme Low-RAM RGB565 Mode) */
+    uart_puts("[zenin-display] Initializing Direct Framebuffer (720x1280 @ 16-bit RGB565, ~1.84 MB VRAM)...\n");
+    void *vram_buffer = kmalloc(720 * 1280 * sizeof(uint16_t));
     if (vram_buffer) {
-        fb_init(720, 1280, vram_buffer);
+        fb_init_format(720, 1280, vram_buffer, FB_FORMAT_RGB565);
     }
 
     /* 5. Initialize Layer 4 Interactive Touch Digitizer */
