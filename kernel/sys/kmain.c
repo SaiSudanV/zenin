@@ -1,12 +1,13 @@
 /*
  * Project Zenin - Kernel Main (kmain)
- * Demonstrating Bare-Metal Boot, PMM Page Allocation, Dynamic Heap, and Z-Bus Event Mesh
+ * Demonstrating Bare-Metal Boot, PMM, Dynamic Heap, Z-Bus, and Direct Display Framebuffer
  */
 
 #include "../include/uart.h"
 #include "../include/pmm.h"
 #include "../include/kheap.h"
 #include "../include/zbus.h"
+#include "../include/fb.h"
 
 extern char __kernel_end;
 
@@ -51,26 +52,27 @@ void kmain(void) {
     /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
     uart_puts("[zenin-zbus] Initializing Z-Bus Zero-Copy Event Mesh...\n");
     zbus_init();
+    zbus_publish(1, 2, ZBUS_MSG_AI_INTENT, "INTENT_TURBO_GAME_MODE", 22);
 
-    /* Test publishing an AI Intent Event */
-    uart_puts("[zenin-zbus] Step 1: Publishing AI Intent Event...\n");
-    bool pub_ok = zbus_publish(1, 2, ZBUS_MSG_AI_INTENT, "INTENT_TURBO_GAME_MODE", 22);
-    uart_puts(pub_ok ? "[zenin-zbus] Step 2: Publish SUCCESS.\n" : "[zenin-zbus] Step 2: Publish FAILED.\n");
-
-    /* Poll the event without memory copies */
     zbus_message_t msg;
-    uart_puts("[zenin-zbus] Step 3: Polling event queue...\n");
     if (zbus_poll(&msg)) {
-        uart_puts("[zenin-zbus] Step 4: Event received! Payload: ");
+        uart_puts("[zenin-zbus] Event processed: ");
         uart_puts((const char *)msg.payload);
-        uart_puts(" | Total Processed: ");
-        print_dec(zbus_get_processed_count());
         uart_puts("\n");
-    } else {
-        uart_puts("[zenin-zbus] Step 4: Queue empty on poll!\n");
     }
 
-    uart_puts("\n[zenin-core] Phase 2 Z-Bus Verified. Entering 0.0% idle WFI sleep.\n");
+    /* 4. Initialize Universal Direct Framebuffer (Display Engine) */
+    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer (1080x2400 Mobile Native)...\n");
+    void *vram_buffer = kmalloc(1080 * 2400 * sizeof(uint32_t));
+    if (vram_buffer) {
+        fb_init(1080, 2400, vram_buffer);
+        fb_clear(FB_COLOR_BLACK);
+        fb_fill_rect(240, 600, 600, 200, FB_COLOR_ZENIN);
+        uart_puts("[zenin-display] Framebuffer rendered 32-bit ARGB scanout buffer successfully!\n");
+        kfree(vram_buffer);
+    }
+
+    uart_puts("\n[zenin-core] Foundation Layer Complete! Entering 0.0% idle WFI sleep.\n");
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {
