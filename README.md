@@ -1,6 +1,6 @@
-# Project Zenith (Universal Modular Android OS)
+# Project Zenin (Universal Modular Android OS)
 
-**Project Zenith** is a lightweight, high-performance, modular distribution of Android designed to run across diverse hardware targets via the **Project Treble GSI** architecture. 
+**Project Zenin** is a lightweight, high-performance, modular distribution of Android designed to run across diverse hardware targets via the **Project Treble GSI** architecture. 
 
 It strips away heavy legacy Android framework overhead and replaces core system components with lightweight, modular alternatives while maintaining full compatibility with the Android ecosystem.
 
@@ -10,12 +10,12 @@ It strips away heavy legacy Android framework overhead and replaces core system 
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│             Zenith User Experience & UI                │
-│  - Zenith System UI (Lightweight status bar & quick qs)│
-│  - Zenith Core Shell / Launcher                        │
+│             Zenin User Experience & UI                 │
+│  - Zenin System UI (Lightweight status bar & quick qs) │
+│  - Zenin Core Shell / Launcher                         │
 │  - Native Privacy & Permission Controller              │
 ├────────────────────────────────────────────────────────┤
-│           Zenith Modular Framework & Services          │
+│           Zenin Modular Framework & Services           │
 │  - MicroG / UnifiedNLP Core Location Subsystem         │
 │  - Modular DEX / Services Overrides (services.jar)     │
 │  - Rust/C++ Lightweight System Daemons                 │
