@@ -1,7 +1,7 @@
 /*
  * Project Zenin - Kernel Main (kmain)
  * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, AI Engine,
- * Universal Multi-OS Execution, and Real-Time Hardware Performance Profiling.
+ * and the Extreme Multi-OS Potato Hardware Stress Test & Battery Analysis.
  */
 
 #include "../include/uart.h"
@@ -12,6 +12,7 @@
 #include "../include/ai_core.h"
 #include "../include/compat.h"
 #include "../include/benchmark.h"
+#include "../include/stress_test.h"
 
 extern char __kernel_end;
 
@@ -42,36 +43,24 @@ void kmain(void) {
     /* 1. Initialize PMM */
     uintptr_t free_mem_start = (uintptr_t)&__kernel_end;
     size_t test_ram_size = 512 * 1024 * 1024;
-    uart_puts("[zenin-pmm] Initializing Physical Page Frame Allocator...\n");
     pmm_init(free_mem_start, test_ram_size);
-    uart_puts("[zenin-pmm] Total Managed RAM: 512 MB | Free Pages: ");
-    print_dec(pmm_get_free_pages());
-    uart_puts("\n");
 
     /* 2. Initialize Dynamic Kernel Heap */
-    uart_puts("[zenin-heap] Initializing Dynamic Kernel Heap Allocator...\n");
     kheap_init();
-    uart_puts("[zenin-heap] Kernel Heap operational.\n");
 
     /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
-    uart_puts("[zenin-zbus] Initializing Z-Bus Zero-Copy Event Mesh...\n");
     zbus_init();
 
-    /* 4. Initialize Universal Direct Framebuffer */
-    uart_puts("[zenin-display] Initializing Universal Direct Framebuffer...\n");
-
-    /* 5. Initialize Native AI Engine */
-    uart_puts("[zenin-ai] Initializing Native AI Intent & Context Engine...\n");
+    /* 4. Initialize Native AI Engine */
     zenin_ai_init();
 
-    /* 6. Initialize Universal Multi-OS Subsystem */
-    uart_puts("[zenin-compat] Initializing Universal Multi-OS Subsystem...\n");
+    /* 5. Initialize Universal Multi-OS Subsystem */
     compat_launcher_init();
 
-    /* 7. Run Comprehensive Hardware Performance & Zero-Leak Profiler */
-    run_system_performance_benchmark();
+    /* 6. Run Extreme Multi-OS Potato Hardware Stress Test & Battery Profiler */
+    run_extreme_stress_test();
 
-    uart_puts("\n[zenin-core] Foundation Layer Complete! Entering 0.0% idle WFI sleep.\n");
+    uart_puts("\n[zenin-core] Stress Test Completed! Entering 0.0% idle WFI sleep.\n");
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {
