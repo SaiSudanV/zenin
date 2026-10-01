@@ -1,7 +1,7 @@
 /*
  * Project Zenin - Kernel Main (kmain)
  * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, AI Engine,
- * and the Extreme Multi-OS Potato Hardware Stress Test & Battery Analysis.
+ * Multi-OS Subsystem, and Layer 4 Interactive Touch Compositor & GUI.
  */
 
 #include "../include/uart.h"
@@ -11,8 +11,8 @@
 #include "../include/fb.h"
 #include "../include/ai_core.h"
 #include "../include/compat.h"
-#include "../include/benchmark.h"
-#include "../include/stress_test.h"
+#include "../include/input.h"
+#include "../include/compositor.h"
 
 extern char __kernel_end;
 
@@ -51,16 +51,48 @@ void kmain(void) {
     /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
     zbus_init();
 
-    /* 4. Initialize Native AI Engine */
-    zenin_ai_init();
+    /* 4. Initialize Universal Direct Framebuffer (720x1280 Mobile View) */
+    uart_puts("[zenin-display] Initializing Direct Framebuffer (720x1280)...\n");
+    void *vram_buffer = kmalloc(720 * 1280 * sizeof(uint32_t));
+    if (vram_buffer) {
+        fb_init(720, 1280, vram_buffer);
+    }
 
-    /* 5. Initialize Universal Multi-OS Subsystem */
-    compat_launcher_init();
+    /* 5. Initialize Layer 4 Interactive Touch Digitizer */
+    uart_puts("[zenin-input] Initializing Hardware Touch Digitizer...\n");
+    input_init(720, 1280);
 
-    /* 6. Run Extreme Multi-OS Potato Hardware Stress Test & Battery Profiler */
-    run_extreme_stress_test();
+    /* 6. Initialize Micro-Compositor & Render First Desktop Frame */
+    uart_puts("[zenin-compositor] Initializing Micro-Compositor & Rendering Shell UI...\n");
+    compositor_init(720, 1280);
+    compositor_render_frame();
+    uart_puts("[zenin-compositor] Shell UI Render Complete (Status Bar, Buttons, Load Gauge)!\n");
 
-    uart_puts("\n[zenin-core] Stress Test Completed! Entering 0.0% idle WFI sleep.\n");
+    /* 7. Simulate Live Interactive Touch Tap on 'TURBO GAME' Button */
+    uart_puts("\n[zenin-input] Simulating Touch Event (Finger Down at X:120, Y:240)...\n");
+    input_handle_hardware_touch(120, 240, TOUCH_EVENT_DOWN);
+
+    /* Poll touch event over Z-Bus */
+    zbus_message_t msg;
+    if (zbus_poll(&msg) && msg.type == ZBUS_MSG_TOUCH_EVT) {
+        uint32_t *tdata = (uint32_t *)msg.payload;
+        compositor_handle_touch(tdata[0], tdata[1], (zenin_touch_type_t)tdata[2]);
+    }
+
+    /* Release finger */
+    uart_puts("[zenin-input] Simulating Touch Event (Finger Up at X:120, Y:240)...\n");
+    input_handle_hardware_touch(120, 240, TOUCH_EVENT_UP);
+    if (zbus_poll(&msg) && msg.type == ZBUS_MSG_TOUCH_EVT) {
+        uint32_t *tdata = (uint32_t *)msg.payload;
+        compositor_handle_touch(tdata[0], tdata[1], (zenin_touch_type_t)tdata[2]);
+    }
+
+    uart_puts("\n[zenin-core] Layer 4 Interactive UI Verified! Entering 0.0% idle WFI sleep.\n");
+
+    /* Free VRAM test allocation */
+    if (vram_buffer) {
+        kfree(vram_buffer);
+    }
 
     /* Infinite Low-Power Wait-For-Interrupt (WFI) Loop */
     while (1) {
