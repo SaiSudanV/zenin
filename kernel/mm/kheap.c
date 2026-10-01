@@ -7,7 +7,7 @@
 #include "../include/kheap.h"
 #include "../include/pmm.h"
 
-#define HEAP_INITIAL_PAGES 16 /* Start with 64 KB heap pool (16 * 4KB pages) */
+#define HEAP_INITIAL_PAGES 32 /* 128 KB heap pool (32 * 4KB pages) */
 #define ALIGNMENT 16
 #define ALIGN_UP(n) (((n) + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1))
 
