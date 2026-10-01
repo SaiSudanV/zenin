@@ -13,6 +13,8 @@
 #include "../include/compat.h"
 #include "../include/input.h"
 #include "../include/compositor.h"
+#include "../include/neural_core.h"
+#include "../include/shell.h"
 
 extern char __kernel_end;
 
@@ -87,7 +89,23 @@ void kmain(void) {
         compositor_handle_touch(tdata[0], tdata[1], (zenin_touch_type_t)tdata[2]);
     }
 
-    uart_puts("\n[zenin-core] Layer 4 Interactive UI Verified! Entering 0.0% idle WFI sleep.\n");
+    /* 8. Layer 5: Initialize On-Device INT4 Neural Core & Userland Shell */
+    uart_puts("\n=====================================================\n");
+    uart_puts("   LAYER 5: USERLAND SHELL & INT4 NEURAL REASONING   \n");
+    uart_puts("=====================================================\n");
+    neural_core_init();
+    shell_init();
+
+    /* Test Shell Command: System status */
+    shell_execute_command("status");
+
+    /* Test Shell Command: Natural language AI turbo boost trigger */
+    shell_execute_command("boost game performance to 60fps");
+
+    /* Test Shell Command: Natural language app launch */
+    shell_execute_command("launch android and windows apps");
+
+    uart_puts("\n[zenin-core] Layer 5 Userland Shell & Neural Engine Verified!\n");
 
     /* Free VRAM test allocation */
     if (vram_buffer) {

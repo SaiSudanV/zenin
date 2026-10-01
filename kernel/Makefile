@@ -6,8 +6,8 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53
 LDFLAGS = -T arch/aarch64/link.ld -nostdlib
 
-SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/input.c ui/compositor.c
-OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/input.o ui/compositor.o
+SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c
+OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o
 
 all: zenin-kernel.elf zenin-kernel.bin
 
@@ -33,6 +33,12 @@ drivers/input.o: drivers/input.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 ui/compositor.o: ui/compositor.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+ai/neural_core.o: ai/neural_core.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/shell.o: sys/shell.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 zenin-kernel.elf: $(OBJS)

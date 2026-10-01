@@ -18,6 +18,12 @@ park_core:
     b       park_core
 
 master_core:
+    /* Enable FP/SIMD (NEON) access in CPACR_EL1 (bits [21:20] = 0b11) */
+    mrs     x0, cpacr_el1
+    orr     x0, x0, #(0x3 << 20)
+    msr     cpacr_el1, x0
+    isb
+
     /* 2. Setup Initial Kernel Stack Pointer */
     ldr     x0, =__stack_top
     mov     sp, x0
