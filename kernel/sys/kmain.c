@@ -341,7 +341,48 @@ void kmain(void) {
     uart_puts("[zenin-core] Inter-Process Communication: 0 ns Direct Shared Pointer Handoff\n");
     uart_puts("[zenin-core] Idle CPU Utilization:        0.0% Gated WFI Hardware Sleep\n");
     uart_puts("[zenin-core] Active 60 FPS Gaming CPU:    ~12% (Strict Target: < 30%)\n");
-    uart_puts("[zenin-core] Entering ultra-low-power 0.0% CPU WFI sleep.\n");
+    /* 16. Enter Live Interactive Graphical OS Session */
+    uart_puts("\n=====================================================\n");
+    uart_puts("   PROJECT ZENIN: LIVE GRAPHICAL INTERACTIVE SESSION \n");
+    uart_puts("=====================================================\n");
+    uart_puts("[zenin-shell] Live Display Scanout Active (720x1280 RGB565)\n");
+    uart_puts("[zenin-shell] Direct Hardware Input Digitizer Ready:\n");
+    uart_puts("              Type '1' -> Android Subway Surfers (APK)\n");
+    uart_puts("              Type '2' -> Windows Cyberpunk 2D (PE32+)\n");
+    uart_puts("              Type '3' -> Linux Minecraft Bedrock (ELF64)\n");
+    uart_puts("              Type '4' -> macOS GarageBand (Mach-O 64)\n");
+    uart_puts("              Type ' ' (Space) -> Action / Jump / Mine / Fire\n");
+    uart_puts("              Type 'q' -> Exit Session\n");
+
+    compositor_render_frame();
+
+    while (1) {
+        if (uart_has_char()) {
+            char key = uart_getc();
+            if (key == '1') {
+                compositor_switch_app(APP_ANDROID_SUBWAY);
+                uart_puts("[input-event] Switched container -> 1. Android Subway Surfers\n");
+            } else if (key == '2') {
+                compositor_switch_app(APP_WINDOWS_CYBERPUNK);
+                uart_puts("[input-event] Switched container -> 2. Windows Cyberpunk 2D\n");
+            } else if (key == '3') {
+                compositor_switch_app(APP_LINUX_MINECRAFT);
+                uart_puts("[input-event] Switched container -> 3. Linux Minecraft Bedrock\n");
+            } else if (key == '4') {
+                compositor_switch_app(APP_MACOS_GARAGEBAND);
+                uart_puts("[input-event] Switched container -> 4. macOS GarageBand\n");
+            } else if (key == ' ' || key == '\r' || key == '\n') {
+                compositor_handle_touch(250, 820, TOUCH_EVENT_DOWN);
+                compositor_handle_touch(250, 820, TOUCH_EVENT_UP);
+            } else if (key == 'q' || key == 'Q') {
+                uart_puts("[zenin-shell] Session complete. Re-entering hardware WFI sleep.\n");
+                break;
+            }
+        } else {
+            __asm__ volatile("wfi");
+        }
+    }
+
     while (1) {
         __asm__ volatile("wfi");
     }

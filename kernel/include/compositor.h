@@ -21,6 +21,14 @@ typedef struct {
     bool is_pressed;
 } zenin_button_t;
 
+typedef enum {
+    APP_NONE = 0,
+    APP_ANDROID_SUBWAY = 1,
+    APP_WINDOWS_CYBERPUNK = 2,
+    APP_LINUX_MINECRAFT = 3,
+    APP_MACOS_GARAGEBAND = 4
+} zenin_active_app_t;
+
 /* Initialize compositor layout */
 void compositor_init(uint32_t width, uint32_t height);
 
@@ -29,5 +37,10 @@ void compositor_render_frame(void);
 
 /* Process touch input and update interactive button states */
 void compositor_handle_touch(uint32_t x, uint32_t y, zenin_touch_type_t type);
+
+/* Switch active container and render live view */
+void compositor_switch_app(zenin_active_app_t app);
+zenin_active_app_t compositor_get_active_app(void);
+
 
 #endif /* ZENIN_COMPOSITOR_H */

@@ -55,6 +55,10 @@ static inline uint16_t fb_argb_to_rgb565(uint32_t c) {
     return (r << 11) | (g << 5) | b;
 }
 
+/* Draw text */
+void fb_draw_char(uint32_t x, uint32_t y, char c, uint32_t color, uint32_t scale);
+void fb_draw_string(uint32_t x, uint32_t y, const char *str, uint32_t color, uint32_t scale);
+
 /* Query active display configuration */
 const zenin_framebuffer_t *fb_get_info(void);
 

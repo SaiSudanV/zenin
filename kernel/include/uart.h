@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /* PL011 PrimeCell UART Base Address (QEMU virt ARM64) */
 #define UART0_BASE 0x09000000
@@ -10,10 +11,20 @@
 #define UART_DR    (*(volatile uint32_t *)(UART0_BASE + 0x00))
 #define UART_FR    (*(volatile uint32_t *)(UART0_BASE + 0x18))
 #define UART_FR_TXFF (1 << 5) /* Transmit FIFO full */
+#define UART_FR_RXFE (1 << 4) /* Receive FIFO empty */
 
 static inline void uart_putc(char c) {
     while (UART_FR & UART_FR_TXFF);
     UART_DR = (uint32_t)(uint8_t)c;
+}
+
+static inline bool uart_has_char(void) {
+    return !(UART_FR & UART_FR_RXFE);
+}
+
+static inline char uart_getc(void) {
+    while (UART_FR & UART_FR_RXFE);
+    return (char)(UART_DR & 0xFF);
 }
 
 static inline void uart_puts(const char *str) {
