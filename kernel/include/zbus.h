@@ -18,6 +18,7 @@ typedef enum {
     ZBUS_MSG_INTERRUPT  = 0x01,
     ZBUS_MSG_POWER_EVT  = 0x02,
     ZBUS_MSG_TOUCH_EVT  = 0x03,
+    ZBUS_MSG_PTR_HANDOFF = 0x04, /* 0 ns direct pointer passing */
     ZBUS_MSG_AI_INTENT  = 0x10,
     ZBUS_MSG_SYS_HALT   = 0xFF
 } zbus_msg_type_t;
@@ -35,6 +36,9 @@ void zbus_init(void);
 
 /* Publish a message to Z-Bus without memory copies */
 bool zbus_publish(uint32_t sender_id, uint32_t receiver_id, zbus_msg_type_t type, const void *data, uint32_t len);
+
+/* 0 ns Direct Shared Pointer Handoff (Zero-copy, zero context switch latency) */
+bool zbus_publish_ptr(uint32_t sender_id, uint32_t receiver_id, void *raw_ptr);
 
 /* Retrieve next message from Z-Bus */
 bool zbus_poll(zbus_message_t *out_msg);

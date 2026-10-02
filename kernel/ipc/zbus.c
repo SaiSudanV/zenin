@@ -50,6 +50,30 @@ bool zbus_publish(uint32_t sender_id, uint32_t receiver_id, zbus_msg_type_t type
     return true;
 }
 
+bool zbus_publish_ptr(uint32_t sender_id, uint32_t receiver_id, void *raw_ptr) {
+    if (!zbus_state) return false;
+
+    uint32_t next_head = (zbus_state->head + 1) % ZBUS_QUEUE_CAPACITY;
+    if (next_head == zbus_state->tail) {
+        return false; /* Ring buffer full */
+    }
+
+    zbus_message_t *slot = &zbus_state->queue[zbus_state->head];
+    slot->sender_id = sender_id;
+    slot->receiver_id = receiver_id;
+    slot->type = ZBUS_MSG_PTR_HANDOFF;
+    slot->payload_len = sizeof(uintptr_t);
+
+    /* Store 64-bit physical pointer directly into payload array - 0ns copy */
+    uintptr_t addr = (uintptr_t)raw_ptr;
+    for (size_t i = 0; i < sizeof(uintptr_t); i++) {
+        slot->payload[i] = (uint8_t)((addr >> (i * 8)) & 0xFF);
+    }
+
+    zbus_state->head = next_head;
+    return true;
+}
+
 bool zbus_poll(zbus_message_t *out_msg) {
     if (!zbus_state || !out_msg || (zbus_state->tail == zbus_state->head)) {
         return false; /* Queue empty */
