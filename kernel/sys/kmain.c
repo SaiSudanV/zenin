@@ -355,6 +355,7 @@ void kmain(void) {
     uart_puts("              Type 'q' -> Exit Session\n");
 
     compositor_render_frame();
+    fb_dump_frame();
 
     while (1) {
         if (uart_has_char()) {
@@ -362,18 +363,26 @@ void kmain(void) {
             if (key == '1') {
                 compositor_switch_app(APP_ANDROID_SUBWAY);
                 uart_puts("[input-event] Switched container -> 1. Android Subway Surfers\n");
+                fb_dump_frame();
             } else if (key == '2') {
                 compositor_switch_app(APP_WINDOWS_CYBERPUNK);
                 uart_puts("[input-event] Switched container -> 2. Windows Cyberpunk 2D\n");
+                fb_dump_frame();
             } else if (key == '3') {
                 compositor_switch_app(APP_LINUX_MINECRAFT);
                 uart_puts("[input-event] Switched container -> 3. Linux Minecraft Bedrock\n");
+                fb_dump_frame();
             } else if (key == '4') {
                 compositor_switch_app(APP_MACOS_GARAGEBAND);
                 uart_puts("[input-event] Switched container -> 4. macOS GarageBand\n");
+                fb_dump_frame();
             } else if (key == ' ' || key == '\r' || key == '\n') {
                 compositor_handle_touch(250, 820, TOUCH_EVENT_DOWN);
                 compositor_handle_touch(250, 820, TOUCH_EVENT_UP);
+                fb_dump_frame();
+            } else if (key == 'd' || key == 'D') {
+                /* Explicit frame dump request */
+                fb_dump_frame();
             } else if (key == 'q' || key == 'Q') {
                 uart_puts("[zenin-shell] Session complete. Re-entering hardware WFI sleep.\n");
                 break;

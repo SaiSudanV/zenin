@@ -4,6 +4,7 @@
  */
 
 #include "../include/fb.h"
+#include "../include/uart.h"
 
 static zenin_framebuffer_t fb_device;
 
@@ -151,4 +152,29 @@ void fb_draw_string(uint32_t x, uint32_t y, const char *str, uint32_t color, uin
 const zenin_framebuffer_t *fb_get_info(void) {
     return &fb_device;
 }
+
+void fb_dump_frame(void) {
+    if (!fb_device.buffer) return;
+    uart_puts("---FRAME_START---\n");
+    /* Dump downscaled 180x320 16-bit RGB565 matrix for ultra-fast 0-delay display mirror */
+    uint32_t step_x = fb_device.width / 180;
+    uint32_t step_y = fb_device.height / 320;
+    uint16_t *buf = (uint16_t *)fb_device.buffer;
+
+    for (uint32_t y = 0; y < 320; y++) {
+        uint32_t src_row = y * step_y * fb_device.width;
+        for (uint32_t x = 0; x < 180; x++) {
+            uint16_t pixel = buf[src_row + (x * step_x)];
+            /* Output 4 hex chars */
+            const char hex_chars[] = "0123456789ABCDEF";
+            uart_putc(hex_chars[(pixel >> 12) & 0xF]);
+            uart_putc(hex_chars[(pixel >> 8) & 0xF]);
+            uart_putc(hex_chars[(pixel >> 4) & 0xF]);
+            uart_putc(hex_chars[pixel & 0xF]);
+        }
+        uart_putc('\n');
+    }
+    uart_puts("---FRAME_END---\n");
+}
+
 

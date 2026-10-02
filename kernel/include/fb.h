@@ -62,4 +62,7 @@ void fb_draw_string(uint32_t x, uint32_t y, const char *str, uint32_t color, uin
 /* Query active display configuration */
 const zenin_framebuffer_t *fb_get_info(void);
 
+/* Stream active scanout frame over UART */
+void fb_dump_frame(void);
+
 #endif /* ZENIN_FB_H */
