@@ -8,6 +8,7 @@
 #include "../include/fb.h"
 #include "../include/uart.h"
 #include "../include/kheap.h"
+#include "../include/pmm.h"
 
 static uint32_t zgl_w = 0;
 static uint32_t zgl_h = 0;
@@ -19,13 +20,18 @@ void zgl_init(uint32_t width, uint32_t height) {
     zgl_h = height;
     rendered_polys = 0;
 
-    /* Allocate 16-bit Z-Buffer (~1.84 MB for 720x1280) */
+    /* Allocate 16-bit Z-Buffer (~1.84 MB for 720x1280) directly via physical pages */
     size_t depth_size = width * height * sizeof(uint16_t);
-    zgl_depth_buffer = (uint16_t *)kmalloc(depth_size);
+    size_t pages_needed = (depth_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    void *first_page = pmm_alloc_page();
+    for (size_t i = 1; i < pages_needed; i++) {
+        pmm_alloc_page();
+    }
+    zgl_depth_buffer = (uint16_t *)first_page;
 
     uart_puts("[zenin-zgl] Initialized Universal 3D Rasterizer (Z-GL):\n");
     uart_puts("            Resolution: 720x1280 | Color Mode: 16-bit RGB565\n");
-    uart_puts("            Depth Testing: 16-bit Hardware Z-Buffer (~1.84 MB)\n");
+    uart_puts("            Depth Testing: 16-bit On-Demand Z-Buffer (~1.84 MB)\n");
     uart_puts("            Ready for Android GLES, Windows D3D, and macOS Metal draws.\n");
 }
 

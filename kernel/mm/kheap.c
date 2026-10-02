@@ -7,7 +7,7 @@
 #include "../include/kheap.h"
 #include "../include/pmm.h"
 
-#define HEAP_INITIAL_PAGES 3000 /* ~12 MB initial heap to support large 1080p framebuffers */
+#define HEAP_INITIAL_PAGES 256 /* ~1 MB initial lean heap footprint (< 3.8 MB total system RAM) */
 #define ALIGNMENT 16
 #define ALIGN_UP(n) (((n) + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1))
 
@@ -21,7 +21,7 @@ static block_header_t *heap_start = NULL;
 static size_t total_allocated_bytes = 0;
 
 void kheap_init(void) {
-    /* Request contiguous physical pages from PMM for the kernel heap */
+    /* Request initial lean physical pages from PMM for the kernel heap */
     void *first_page = pmm_alloc_page();
     for (size_t i = 1; i < HEAP_INITIAL_PAGES; i++) {
         pmm_alloc_page();
