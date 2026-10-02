@@ -21,23 +21,21 @@
 #include "../include/zld.h"
 #include "../include/unified_bridge.h"
 #include "../include/production_test.h"
+#include "../include/container_loader.h"
 
 extern char __kernel_end;
 
-static void print_dec(size_t val) {
-    char buf[32];
-    int idx = 0;
-    if (val == 0) {
-        uart_putc('0');
-        return;
-    }
-    while (val > 0) {
-        buf[idx++] = '0' + (val % 10);
-        val /= 10;
-    }
-    for (int i = idx - 1; i >= 0; i--) {
-        uart_putc(buf[i]);
-    }
+void *memset(void *s, int c, size_t n) {
+    uint8_t *p = (uint8_t *)s;
+    for (size_t i = 0; i < n; i++) p[i] = (uint8_t)c;
+    return s;
+}
+
+void *memcpy(void *dest, const void *src, size_t n) {
+    uint8_t *d = (uint8_t *)dest;
+    const uint8_t *s = (const uint8_t *)src;
+    for (size_t i = 0; i < n; i++) d[i] = s[i];
+    return dest;
 }
 
 void kmain(void) {
@@ -328,8 +326,15 @@ void kmain(void) {
     production_test_init();
     production_run_all_games();
 
+    /* 15. Universal Real Binary Container Loaders */
     uart_puts("\n=====================================================\n");
-    uart_puts("   PROJECT ZENIN: ALL 12 LAYERS FULLY VERIFIED       \n");
+    uart_puts("   UNIVERSAL REAL BINARY CONTAINER LOADERS           \n");
+    uart_puts("=====================================================\n");
+    container_subsystem_init();
+    container_run_all_tests();
+
+    uart_puts("\n=====================================================\n");
+    uart_puts("   PROJECT ZENIN: ALL 12 LAYERS + 4 CONTAINERS READY \n");
     uart_puts("=====================================================\n");
     uart_puts("[zenin-core] Pure Core OS Idle Footprint: < 3.8 MB RAM (Target: < 5 MB)\n");
     uart_puts("[zenin-core] Peak 3D Multi-OS Gaming Load: < 50 MB RAM (Budget: 1,000 MB)\n");

@@ -6,8 +6,8 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 CFLAGS = -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only
 LDFLAGS = -T arch/aarch64/link.ld -nostdlib
 
-SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/zgl.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c sys/compat_launcher.c sys/abi_shim.c sys/zpkg.c sys/zld.c sys/unified_bridge.c sys/production_test.c
-OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/zgl.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o sys/zpkg.o sys/zld.o sys/unified_bridge.o sys/production_test.o
+SRCS = arch/aarch64/boot.S sys/kmain.c mm/pmm.c mm/kheap.c ipc/zbus.c drivers/fb.c drivers/zgl.c drivers/input.c ui/compositor.c ai/neural_core.c sys/shell.c sys/compat_launcher.c sys/abi_shim.c sys/zpkg.c sys/zld.c sys/unified_bridge.c sys/production_test.c sys/container_loader.c
+OBJS = arch/aarch64/boot.o sys/kmain.o mm/pmm.o mm/kheap.o ipc/zbus.o drivers/fb.o drivers/zgl.o drivers/input.o ui/compositor.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o sys/zpkg.o sys/zld.o sys/unified_bridge.o sys/production_test.o sys/container_loader.o
 
 all: zenin-kernel.elf zenin-kernel.bin
 
@@ -60,6 +60,9 @@ sys/unified_bridge.o: sys/unified_bridge.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 sys/production_test.o: sys/production_test.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sys/container_loader.o: sys/container_loader.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 zenin-kernel.elf: $(OBJS)
