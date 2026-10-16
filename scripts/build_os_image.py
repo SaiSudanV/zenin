@@ -157,7 +157,7 @@ def build_pe32_plus(text_bytes, entry_offset):
 
     pe += opt
     pe += section(b".text", len(text_bytes), UEFI_TEXT_RVA,
-                  len(text_raw), size_of_headers, 0x60000020)
+                  len(text_raw), size_of_headers, 0xE0000020)
     pe += section(b".reloc", len(reloc_payload), reloc_rva,
                   len(reloc_raw), size_of_headers + len(text_raw), 0x42000040)
 
