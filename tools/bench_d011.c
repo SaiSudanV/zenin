@@ -288,35 +288,40 @@ static void slab_init(uint8_t *page, uint16_t *head) {
 int main(void) {
     cycles_init();
 
-    /* 8b. Hot tier: real static arenas/slots vs raw array pop. */
-    static uint8_t latency_raw_page[8192] __attribute__((aligned(4096)));
-    static uint32_t latency_raw_top = 2;
-    PMM_ARENA_DEFINE(latency_arena, 2);
-    KHEAP_STATIC_SLOTS(latency_slots, 128u, 2u);
+    /* 8b. Hot tier: real static arenas/slots vs raw array pop.
+     * Many-ops bracket (K per sample) over a K-entry arena so the total sits
+     * above one timer tick; per-op cost is independent of arena size. */
+    enum { K2 = 64 };
+    static uint8_t latency_raw_page[K2 * 4096] __attribute__((aligned(4096)));
+    static uint32_t latency_raw_top = K2;
+    PMM_ARENA_DEFINE(latency_arena, K2);
+    KHEAP_STATIC_SLOTS(latency_slots, 128u, K2);
 
     uint64_t hot_base_min = UINT64_MAX, hot_os_min = UINT64_MAX;
-    for (uint32_t rep = 0; rep < 256; rep++) {
+    for (uint32_t rep = 0; rep < 64; rep++) {
+        void *p[K2], *s[K2];
         uint64_t t = read_cycles();
-        void *p = pmm_arena_alloc(&latency_arena);
+        for (int i = 0; i < K2; i++) p[i] = pmm_arena_alloc(&latency_arena);
         uint64_t e = read_cycles() - t;
-        if (!p) return 1;
         if (e < hot_os_min) hot_os_min = e;
-        pmm_arena_free(&latency_arena);
+        for (int i = 0; i < K2; i++) pmm_arena_free(&latency_arena);
 
         t = read_cycles();
-        void *q = latency_raw_top ? (void *)&latency_raw_page[(2 - latency_raw_top) * 4096] : NULL;
-        if (latency_raw_top) latency_raw_top--;
+        for (int i = 0; i < K2; i++) {
+            void *q = latency_raw_top ? (void *)&latency_raw_page[(K2 - latency_raw_top) * 4096] : NULL;
+            if (latency_raw_top) latency_raw_top--;
+            if (!q) return 1;
+        }
         e = read_cycles() - t;
-        if (!q) return 1;
         if (e < hot_base_min) hot_base_min = e;
-        if (latency_raw_top < 2) latency_raw_top++;
+        latency_raw_top = K2;
 
         t = read_cycles();
-        void *s = kheap_static_alloc(&latency_slots);
+        for (int i = 0; i < K2; i++) s[i] = kheap_static_alloc(&latency_slots);
         e = read_cycles() - t;
-        if (!s) return 1;
         if (e < hot_os_min) hot_os_min = e;
-        kheap_static_free(&latency_slots);
+        for (int i = 0; i < K2; i++) kheap_static_free(&latency_slots);
+        if (!p[K2 - 1] || !s[K2 - 1]) return 1;
     }
 
     /* 8c. Cold PMM: extracted pmm.c alloc/free vs baseline bitmap pop/clear.
@@ -394,10 +399,10 @@ int main(void) {
     }
 
     printf("\nZenin D011 OS-added latency vs minimal-correct baseline (real cycles)\n");
-    printf("many-ops bracket: min-over-samples total for K ops (K=32 PMM, K=16 heap)\n");
+    printf("many-ops bracket: min-over-samples total for K ops (K=64 hot, K=32 PMM, K=16 heap)\n");
     printf("======================================================================\n");
     int fails = 0;
-    report("Hot-tier arena/slot alloc", "raw-array", hot_base_min, "arena", hot_os_min, 1, &fails);
+    report("Hot-tier arena/slot alloc", "raw-array", hot_base_min, "arena", hot_os_min, K2, &fails);
     report("Cold PMM page pop", "baseline", pmm_base_min, "pmm", pmm_os_min, K, &fails);
     report("Cold PMM page free", "baseline", pmm_free_base_min, "pmm", pmm_free_os_min, K, &fails);
     report("Cold heap slot pop", "mirror", heap_base_min, "slab", heap_os_min, HK, &fails);
