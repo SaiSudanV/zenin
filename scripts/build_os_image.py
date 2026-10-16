@@ -336,8 +336,8 @@ def main():
     ext = ".exe" if os.name == "nt" else ""
     boot_efi = os.path.join(DIST_DIR, "BOOTAA64.EFI")
     with open(boot_efi, "wb") as f:
-        f.write(build_uefi_stub(pfx + "gcc.exe", pfx + "ld.exe",
-                                pfx + "objcopy.exe", pfx + "nm.exe", DIST_DIR))
+        f.write(build_uefi_stub(pfx + "gcc" + ext, pfx + "ld" + ext,
+                                pfx + "objcopy" + ext, pfx + "nm" + ext, DIST_DIR))
     out_uefi = os.path.join(DIST_DIR, "zenin-os-uefi.img")
     build_uefi_disk(boot_efi, out_img, out_uefi)
     on_disk = make_sparse(out_uefi)
