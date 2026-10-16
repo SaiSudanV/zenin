@@ -210,7 +210,9 @@ static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
     bi->ram_count = 0;
     bi->mmio_count = 0;
     u64 off = 0;
-    while (off + desc_size <= map_size) {
+    if (desc_size < sizeof(efi_mem_desc) || desc_size > 256u) desc_size = sizeof(efi_mem_desc);
+    u64 iters = 0;
+    while (off + desc_size <= map_size && iters < 512u) {
         efi_mem_desc *d = (efi_mem_desc *)((u8 *)map + off);
         if (d->type == 7 /* EfiConventionalMemory */ ||
             (d->type >= 1 && d->type <= 4) /* Loader/BootServices */) {
@@ -228,6 +230,7 @@ static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
             }
         }
         off += desc_size;
+        iters++;
     }
     return boot_info_storage;
 }
