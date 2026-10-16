@@ -1,0 +1,77 @@
+# Real-ARM64 UEFI boot check (Stream C / Phase 1 Goal 1.6).
+#
+# Builds dist/zenin-os-uefi.img on the ubuntu-24.04-arm runner (real Ampere
+# silicon), boots it through AAVMF (UEFI firmware) with a NON-DEFAULT memory
+# size so the firmware GetMemoryMap differs from the QEMU -kernel layout, and
+# asserts the full handoff chain prints:
+#     UEFI -> boot_info -> W^X split-subtree freeze -> [zenin-memory] OS-owned
+#     resident total
+# It surfaces that exact KiB figure in the job log. This is the automated
+# (KVM/QEMU-virt) capture; the authoritative non-QEMU capture is booting the
+# same artifact on Oracle Ampere A1 / AWS Graviton (see docs/phase1-cloud-boot.md).
+name: uefi-boot
+
+on:
+  push:
+    paths:
+      - "kernel/**"
+      - "scripts/build_os_image.py"
+      - "scripts/efi_boot.c"
+      - ".github/workflows/uefi-boot.yml"
+  workflow_dispatch:
+
+jobs:
+  uefi-boot:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain + QEMU AAVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
+
+      - name: Build kernel (native aarch64)
+        run: make -C kernel CROSS_COMPILE=
+
+      - name: Build installable UEFI image
+        run: |
+          python3 scripts/build_os_image.py \
+            --toolchain-prefix= --size-tool=size --objdump=objdump
+          ls -l dist/zenin-os-uefi.img
+
+      - name: Boot image under AAVMF (non-default memory size)
+        run: |
+          set +e
+          KVM=""
+          if [ -e /dev/kvm ]; then KVM="-enable-kvm"; fi
+          AAVMF=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd
+          # -m 3072 (3 GiB) differs from the QEMU -kernel 2 GiB default, so the
+          # firmware GetMemoryMap / usable-RAM discovery is genuinely exercised.
+          timeout 300 qemu-system-aarch64 \
+            -M virt -cpu max $KVM -m 3072 \
+            -bios "$AAVMF" \
+            -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
+            -display none -serial file:uefi_serial.log
+          echo "qemu-exit=$?"
+
+      - name: Assert handoff chain + surface idle-RAM figure
+        run: |
+          echo "=== UEFI boot serial (tail) ==="
+          tail -n 60 uefi_serial.log || true
+          echo "=== assertions ==="
+          grep -a "zenin-mmu" uefi_serial.log | grep -a "frozen" \
+            || { echo "W^X split-subtree freeze line missing"; exit 1; }
+          grep -a "Test 9/9" uefi_serial.log \
+            || { echo "Test 9 (W^X) did not run"; exit 1; }
+          grep -a "\[PASS\] .text RX" uefi_serial.log \
+            || { echo "W^X regression did not pass"; exit 1; }
+          # Gate on the idle-RAM measurement and print the exact figure.
+          line=$(grep -a "OS-owned resident total" uefi_serial.log)
+          echo "$line" || { echo "idle-RAM line missing"; exit 1; }
+          kib=$(echo "$line" | sed -n 's/.*: \([0-9][0-9]*\) KiB.*/\1/p')
+          echo "OS-owned resident total = ${kib} KiB"
+          test -n "$kib" || { echo "could not parse KiB"; exit 1; }
+          test "$kib" -lt 5120 || { echo "idle RAM ${kib} KiB >= 5 MiB"; exit 1; }
+          echo "1.6 idle-RAM (AAVMF/real-CPU): ${kib} KiB (< 5 MiB) PASS"
