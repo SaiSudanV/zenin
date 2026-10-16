@@ -160,3 +160,17 @@ bool zenin_irq_test_wfi(void) {
     uart_puts("\n");
     return zenin_last_irq_id == VIRTUAL_TIMER_PPI;
 }
+
+/* Called from vectors.S vector_default on any non-IRQ exception. Prints the
+ * syndrome, fault address, and link address, then hangs — used to root-cause
+ * silent data aborts during the UEFI boot path. */
+void zenin_panic(uint64_t esr, uint64_t far, uint64_t elr) {
+    uart_puts("[EXC] esr=");
+    uart_put_hex(esr);
+    uart_puts(" far=");
+    uart_put_hex(far);
+    uart_puts(" elr=");
+    uart_put_hex(elr);
+    uart_puts("\n");
+    for (;;) __asm__ volatile("wfi");
+}

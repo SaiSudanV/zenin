@@ -64,6 +64,10 @@ zenin_irq_entry:
     eret
 
 vector_default:
+    mrs x0, esr_el1
+    mrs x1, far_el1
+    mrs x2, elr_el1
+    bl zenin_panic
     wfi
     b vector_default
     .ltorg
