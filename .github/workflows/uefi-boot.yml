@@ -52,7 +52,8 @@ jobs:
           timeout 300 qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
-            -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
+            -drive file=dist/zenin-os-uefi.img,format=raw,if=none,id=hd0 \
+            -device virtio-blk-pci,drive=hd0,romfile= \
             -display none -serial file:uefi_serial.log
           echo "qemu-exit=$?"
 
