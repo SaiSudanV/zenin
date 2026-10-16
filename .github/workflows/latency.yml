@@ -1,0 +1,47 @@
+name: D011 latency (real-silicon delta=0)
+
+# Stream A of the Phase 1 hardware-verification plan (KF005).
+# Measures OS-added latency of the Zenin allocator paths against their
+# minimal-correct baselines on REAL ARM64 silicon (GitHub's Ampere Altra /
+# Cobalt runners) using PMCCNTR via perf_event_open. This is the authoritative
+# cycle-counter evidence for the "exactly zero OS-added latency" requirement —
+# it resolves the ambiguity that QEMU's coarse CNTVCT could not.
+
+on:
+  push:
+    paths:
+      - "tools/bench_d011.c"
+      - "kernel/mm/pmm.c"
+      - "kernel/mm/kheap.c"
+      - "kernel/include/pmm_arena.h"
+      - "kernel/include/kheap_static.h"
+      - "kernel/sys/production_test.c"
+      - ".github/workflows/latency.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  latency:
+    name: delta=0 on ARM64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable unprivileged perf counters
+        # perf_event_open(PERF_COUNT_HW_CPU_CYCLES) needs the cycle counter
+        # readable; relax the kernel guard so the owning task can drive PMCCNTR.
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=-1
+          cat /proc/sys/kernel/perf_event_paranoid
+
+      - name: Build bench_d011
+        run: |
+          gcc -Wall -Wextra -O2 tools/bench_d011.c -o bench_d011
+
+      - name: Report CPU
+        run: lscpu | grep -Ei 'model name|Architecture|CPU\(s\)|MHz' || true
+
+      - name: Run D011 latency benchmark
+        # Nonzero exit (any path with positive OS-added latency) fails the job.
+        run: ./bench_d011
