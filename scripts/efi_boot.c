@@ -194,7 +194,13 @@ static u8 boot_info_storage[sizeof(zenin_boot_info_t) +
  * identity map must map as device memory. */
 static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
                              u64 kernel_start, u64 kernel_end) {
-    dbg("ZENIN-EFI: build_boot_info\n");
+    dbg("ZENIN-EFI: build_boot_info map=");
+    dbg_hex((u64)(unsigned long)map);
+    dbg(" size=");
+    dbg_hex(map_size);
+    dbg(" desc=");
+    dbg_hex(desc_size);
+    dbg("\n");
     zenin_boot_info_t *bi = (zenin_boot_info_t *)boot_info_storage;
     zenin_boot_range_t *regions = (zenin_boot_range_t *)(bi + 1);
     zenin_boot_range_t *mmio = regions + ZENIN_BOOT_INFO_MAX_REGIONS;
