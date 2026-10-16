@@ -1,6 +1,5 @@
 /*
- * Project Zenin - Interactive Native Shell & App Launcher Implementation
- * Bridges touch/CLI commands, AI intent routing, and multi-OS app execution.
+ * Project Zenin - Shell command/intent prototype.
  */
 
 #include "../include/shell.h"
@@ -19,28 +18,26 @@ static bool str_equals(const char *s1, const char *s2) {
 }
 
 void shell_init(void) {
-    uart_puts("[zenin-shell] Userland Shell & Native App Launcher initialized.\n");
+    uart_puts("[zenin-shell] Command and intent functions initialized; UART CLI is not integrated.\n");
 }
 
 void shell_launch_app(zenin_app_id_t app_id) {
     switch (app_id) {
         case APP_ID_STATUS:
             uart_puts("[zenin-shell] -> Launching 'System Monitor':\n");
-            uart_puts("              CPU: 1.0 GHz Cortex-A53 (0.0% Idle)\n");
-            uart_puts("              RAM: 18 KB used / 512 MB total (99.99% free)\n");
-            uart_puts("              Battery: Gated WFI (Zero Idle Drain)\n");
+            uart_puts("              CPU utilization and power: not measured\n");
+            uart_puts("              RAM: see boot-time kernel/PMM accounting\n");
             break;
         case APP_ID_AI_ASSISTANT:
             uart_puts("[zenin-shell] -> Launching 'Zenin AI Neural Engine':\n");
-            uart_puts("              Model: INT4 Quantized Tensor (ARM NEON optimized)\n");
-            uart_puts("              Inference Latency: < 4 microseconds on 1.0 GHz\n");
+            uart_puts("              Experimental fixed-weight classifier; quality/latency unverified\n");
             break;
         case APP_ID_COMPAT_LAUNCHER:
             uart_puts("[zenin-shell] -> Launching 'Universal Multi-OS Compatibility Bridge':\n");
-            uart_puts("              Ready to execute Linux ELF, Android APK, Windows EXE, macOS Mach-O.\n");
+            uart_puts("              Format parsers exist; application execution is not implemented.\n");
             break;
         case APP_ID_TASK_MANAGER:
-            uart_puts("[zenin-shell] -> Launching 'Task Manager': All background daemons hibernated.\n");
+            uart_puts("[zenin-shell] Task-management service is not implemented.\n");
             break;
         case APP_ID_TERMINAL:
             uart_puts("[zenin-shell] -> Launching 'Zenin Direct Hardware Terminal'.\n");
@@ -90,13 +87,13 @@ void shell_execute_command(const char *cmd_line) {
 
     switch (intent) {
         case NEURAL_INTENT_PERF_OPTIMIZE:
-            uart_puts("[zenin-ai] -> Executing: TURBO GAME BOOST (Max clock, zero background sync)\n");
+            uart_puts("[zenin-ai] Intent classified as performance optimization; no DVFS actuator is implemented.\n");
             break;
         case NEURAL_INTENT_POWER_SAVE:
-            uart_puts("[zenin-ai] -> Executing: ULTRA POWER SAVE (Clock down, WFI sleep)\n");
+            uart_puts("[zenin-ai] Intent classified as power saving; no DVFS actuator is implemented.\n");
             break;
         case NEURAL_INTENT_LAUNCH_APP:
-            uart_puts("[zenin-ai] -> Executing: APP LAUNCH DISPATCH\n");
+            uart_puts("[zenin-ai] Launch intent recognized; application runtime is not implemented.\n");
             shell_launch_app(APP_ID_COMPAT_LAUNCHER);
             break;
         case NEURAL_INTENT_SYS_STATUS:

@@ -29,15 +29,16 @@ typedef struct {
     zbus_msg_type_t type;
     uint32_t payload_len;
     uint8_t payload[ZBUS_PAYLOAD_MAX];
+    uintptr_t payload_ptr; /* Non-owning pointer for ZBUS_MSG_PTR_HANDOFF. */
 } zbus_message_t;
 
-/* Initialize the Z-Bus lockless ring buffer */
+/* Initialize the bounded single-producer/single-consumer ring buffer. */
 void zbus_init(void);
 
 /* Publish a message to Z-Bus without memory copies */
 bool zbus_publish(uint32_t sender_id, uint32_t receiver_id, zbus_msg_type_t type, const void *data, uint32_t len);
 
-/* 0 ns Direct Shared Pointer Handoff (Zero-copy, zero context switch latency) */
+/* Enqueue a non-owning pointer token without copying the pointed-to payload. */
 bool zbus_publish_ptr(uint32_t sender_id, uint32_t receiver_id, void *raw_ptr);
 
 /* Retrieve next message from Z-Bus */

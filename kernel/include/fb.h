@@ -19,6 +19,9 @@
 #define FB_COLOR_WHITE_16   0xFFFF
 #define FB_COLOR_ZENIN_16   0x073F      /* RGB565 Zenin Cyan */
 
+#define FB_DEFAULT_WIDTH    360
+#define FB_DEFAULT_HEIGHT   640
+
 typedef enum {
     FB_FORMAT_ARGB8888 = 32, /* Crisp 32-bit true color */
     FB_FORMAT_RGB565   = 16  /* Extreme Low-RAM 16-bit mode (Half VRAM) */

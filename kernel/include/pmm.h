@@ -19,10 +19,16 @@ void pmm_init(uintptr_t mem_start, size_t mem_size);
 /* Allocate a single 4KB physical page frame */
 void *pmm_alloc_page(void);
 
+/* Allocate n contiguous 4KB physical page frames */
+void *pmm_alloc_pages(size_t count);
+
 /* Free a previously allocated 4KB page frame */
 void pmm_free_page(void *ptr);
 
-/* Query available physical memory statistics */
+/* Free n contiguous 4KB page frames */
+void pmm_free_pages(void *ptr, size_t count);
+
+/* Query available physical memory statistics (derived from the bitmap) */
 size_t pmm_get_free_pages(void);
 size_t pmm_get_total_pages(void);
 

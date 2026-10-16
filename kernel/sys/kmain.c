@@ -81,7 +81,7 @@ void kmain(uint64_t boot_info) {
     uintptr_t ram_base, ram_end;
     bool have_map = boot_info && bi->magic == ZENIN_BOOT_INFO_MAGIC && bi->ram_count > 0;
     if (have_map) {
-        const zenin_ram_region_t *regions = (const zenin_ram_region_t *)(bi + 1);
+        const zenin_boot_range_t *regions = zenin_boot_ram(bi);
         uintptr_t k_end = (uintptr_t)&__kernel_end;
         ram_base = 0; ram_end = 0;
         for (uint64_t i = 0; i < bi->ram_count; i++) {

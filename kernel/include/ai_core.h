@@ -21,12 +21,24 @@ typedef enum {
     AI_ACTION_SUMMARIZE_SCREEN
 } zenin_ai_action_t;
 
+enum {
+    ZENIN_CONTEXT_MEMORY_VALID = 1u << 0,
+    ZENIN_CONTEXT_ACTIVE_SURFACE_VALID = 1u << 1,
+    ZENIN_CONTEXT_BATTERY_VALID = 1u << 2,
+    ZENIN_CONTEXT_CPU_FREQUENCY_VALID = 1u << 3,
+    ZENIN_CONTEXT_NETWORK_VALID = 1u << 4
+};
+
 typedef struct {
+    uint32_t valid_fields;
     uint32_t battery_percent;
     bool is_charging;
     uint32_t free_ram_mb;
+    uint32_t total_ram_mb;
     uint32_t cpu_clock_mhz;
-    const char *active_app_title;
+    uint32_t active_container_id;
+    const char *active_surface_name;
+    const char *network_status;
 } zenin_system_context_t;
 
 /* Initialize AI intent engine */

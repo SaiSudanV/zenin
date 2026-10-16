@@ -10,6 +10,7 @@
 #include "../include/zbus.h"
 #include "../include/fb.h"
 #include "../include/zgl.h"
+#include "../include/hal_cpu.h"
 
 #define MAX_DYNAMIC_SYMBOLS 128
 
@@ -78,9 +79,15 @@ static void shim_win32_output_debug_string(const char *str) {
     uart_puts("\n");
 }
 
+static uint64_t win32_start_counter = 0;
+static uint64_t win32_counter_frequency = 0;
+
 static uint32_t shim_win32_get_tick_count(void) {
-    static uint32_t simulated_ticks = 1000;
-    return (simulated_ticks += 16); /* 16ms = 60 FPS simulated delta */
+    if (win32_counter_frequency == 0) return 0;
+    uint64_t elapsed = hal_get_cycles() - win32_start_counter;
+    uint64_t elapsed_ms = (elapsed / win32_counter_frequency) * 1000 +
+                          ((elapsed % win32_counter_frequency) * 1000) / win32_counter_frequency;
+    return (uint32_t)elapsed_ms; /* Win32 GetTickCount wraps at 2^32 ms. */
 }
 
 /* macOS / iOS Mach Trap / Cocoa Log Shim (NSLog) */
@@ -94,6 +101,8 @@ static void shim_macos_nslog(const char *msg) {
 void zld_init(void) {
     symbol_count = 0;
     total_resolved = 0;
+    win32_start_counter = hal_get_cycles();
+    win32_counter_frequency = hal_get_counter_frequency();
 
     /* Generic Standard C Library symbols (libc / msvcrt / libSystem) */
     zld_register_symbol("malloc", (uintptr_t)shim_malloc, ZLD_ABI_GENERIC);
@@ -116,8 +125,8 @@ void zld_init(void) {
     zld_register_symbol("NSLog", (uintptr_t)shim_macos_nslog, ZLD_ABI_LIBSYSTEM);
 
     uart_puts("[zenin-zld] Dynamic Symbol Linker (z-ld.so) initialized:\n");
-    uart_puts("            Seeded 10 core Universal C Runtime & Multi-OS symbols.\n");
-    uart_puts("            Memory overhead: ~4 KB | Resolution speed: < 2 us/symbol.\n");
+    uart_puts("            Registered platform shim symbols; ABI coverage is partial.\n");
+    uart_puts("            Lookup timing is not measured.\n");
 }
 
 bool zld_register_symbol(const char *name, uintptr_t address, zld_abi_t abi) {
@@ -149,7 +158,7 @@ uint32_t zld_link_dependencies(const char *module_name, const char **needed_symb
     if (!module_name || !needed_symbols) return 0;
 
     uint32_t resolved_now = 0;
-    uart_puts("[z-ld] Linking dynamic relocations for module: ");
+    uart_puts("[z-ld] Diagnostic symbol-name lookup for module description: ");
     uart_puts(module_name);
     uart_puts("\n");
 
@@ -157,9 +166,9 @@ uint32_t zld_link_dependencies(const char *module_name, const char **needed_symb
         uintptr_t target = zld_resolve_symbol(needed_symbols[i], abi);
         if (target != 0) {
             resolved_now++;
-            uart_puts("       -> Resolved symbol '");
+            uart_puts("       -> Registered symbol found: '");
             uart_puts(needed_symbols[i]);
-            uart_puts("' -> [Zenin Kernel VMM direct bridge]\n");
+            uart_puts("' (no module relocation or load performed)\n");
         } else {
             uart_puts("       -> Warning: Unresolved symbol '");
             uart_puts(needed_symbols[i]);

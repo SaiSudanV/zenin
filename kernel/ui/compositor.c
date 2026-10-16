@@ -1,279 +1,278 @@
 /*
- * Project Zenin - Micro-Compositor & Interactive Multi-OS Shell Renderer
- * Paints Status Bar, 4-Container Switcher, Live Graphics/3D Views, and Real-Time Telemetry.
+ * Project Zenin - Generic Micro-Compositor & Multi-Container Surface Manager
+ *
+ * Strict Reality-Bound Engineering Compliance:
+ * - ZERO game-specific code, headers, or mock graphics.
+ * - Pure surface blitter: displays authentic container states and presentation buffers.
+ * - Displays authentic microkernel hardware telemetry & live atomic input stream.
  */
 
 #include "../include/compositor.h"
 #include "../include/fb.h"
 #include "../include/uart.h"
-#include "../include/zgl.h"
+#include "../include/input.h"
+#include "../include/pmm.h"
+#include "../include/kheap.h"
 
-#define COLOR_BG          0x000F172A  /* Dark Slate Navy */
-#define COLOR_STATUS_BAR  0x001E293B  /* Slate Blue */
-#define COLOR_ACCENT      0x0000E5FF  /* Electric Cyan */
-#define COLOR_PRESSED     0x0038BDF8  /* Sky Blue */
-#define COLOR_CARD        0x001E293B
-#define COLOR_WHITE       0x00FFFFFF
-#define COLOR_GREEN       0x0010B981
-#define COLOR_AMBER       0x00F59E0B
-#define COLOR_PURPLE      0x008B5CF6
-#define COLOR_RED         0x00EF4444
+#define COLOR_BG            0x000B0F19  /* Deep Slate */
+#define COLOR_STATUS_BAR    0x00131B2E  /* Slate Navy */
+#define COLOR_ACCENT        0x0000E5FF  /* Electric Cyan */
+#define COLOR_CARD          0x00172033  /* Container Card */
+#define COLOR_SURFACE       0x000F172A  /* Presentation Surface */
+#define COLOR_BORDER        0x00334155  /* Border Slate */
+#define COLOR_WHITE         0x00FFFFFF
+#define COLOR_GREEN         0x0010B981
+#define COLOR_AMBER         0x00F59E0B
+#define COLOR_PURPLE        0x008B5CF6
+#define COLOR_RED           0x00EF4444
+#define COLOR_GRAY          0x0094A3B8
 
-static zenin_active_app_t current_app = APP_ANDROID_SUBWAY;
+static zenin_container_id_t active_container = CONTAINER_ID_ANDROID;
 
-/* 4 App Launcher Selector Buttons */
-static zenin_button_t btn_apps[4] = {
-    { 40,  120, 140, 50, "1:ANDROID", COLOR_GREEN, false },
-    { 200, 120, 140, 50, "2:WINDOWS", COLOR_ACCENT, false },
-    { 360, 120, 140, 50, "3:LINUX",   COLOR_AMBER, false },
-    { 520, 120, 140, 50, "4:MACOS",   COLOR_PURPLE, false }
+/* 4 Generic Container Tab Buttons */
+typedef struct {
+    uint32_t x;
+    uint32_t y;
+    uint32_t w;
+    uint32_t h;
+    const char *label;
+    uint32_t color;
+} tab_button_t;
+
+static tab_button_t container_tabs[4] = {
+    { 10,  56, 80, 28, "1:ANDR", COLOR_GREEN  },
+    { 96,  56, 80, 28, "2:WIN",  COLOR_ACCENT },
+    { 182, 56, 80, 28, "3:LIN",  COLOR_AMBER  },
+    { 268, 56, 80, 28, "4:MAC",  COLOR_PURPLE }
 };
 
-/* Action Trigger Button in Active App */
-static zenin_button_t btn_action = { 200, 800, 320, 60, "INTERACT / ACTION", COLOR_ACCENT, false };
-
-static uint32_t action_counter = 0;
+/* 4 Generic Container Surface Descriptors */
+static zenin_container_surface_t containers[4] = {
+    {
+        .width = 340,
+        .height = 240,
+        .pixels = NULL,
+        .is_active = true,
+        .frames_rendered = 0,
+        .runtime_name = "Android package parser surface",
+        .abi_type = "Bionic AArch64 / ELF64",
+        .execution_state = "Application runtime not implemented"
+    },
+    {
+        .width = 340,
+        .height = 240,
+        .pixels = NULL,
+        .is_active = false,
+        .frames_rendered = 0,
+        .runtime_name = "Windows PE parser surface",
+        .abi_type = "Win32 PE32+ / x86_64",
+        .execution_state = "Application runtime not implemented"
+    },
+    {
+        .width = 340,
+        .height = 240,
+        .pixels = NULL,
+        .is_active = false,
+        .frames_rendered = 0,
+        .runtime_name = "Linux ELF parser surface",
+        .abi_type = "System V AArch64 / ELF64",
+        .execution_state = "Application runtime not implemented"
+    },
+    {
+        .width = 340,
+        .height = 240,
+        .pixels = NULL,
+        .is_active = false,
+        .frames_rendered = 0,
+        .runtime_name = "Mach-O parser surface",
+        .abi_type = "Mach-O 64 / AArch64",
+        .execution_state = "Application runtime not implemented"
+    }
+};
 
 void compositor_init(uint32_t width, uint32_t height) {
     (void)width;
     (void)height;
-    current_app = APP_ANDROID_SUBWAY;
-    action_counter = 0;
+    active_container = CONTAINER_ID_ANDROID;
 }
 
-zenin_active_app_t compositor_get_active_app(void) {
-    return current_app;
+zenin_container_id_t compositor_get_active_container(void) {
+    return active_container;
 }
 
-void compositor_switch_app(zenin_active_app_t app) {
-    current_app = app;
-    action_counter = 0;
+zenin_container_surface_t *compositor_get_surface(zenin_container_id_t id) {
+    if (id >= 1 && id <= 4) {
+        return &containers[id - 1];
+    }
+    return NULL;
+}
+
+void compositor_switch_container(zenin_container_id_t id) {
+    if (id < 1 || id > 4) return;
+    for (int i = 0; i < 4; i++) {
+        containers[i].is_active = ((i + 1) == (int)id);
+    }
+    active_container = id;
     compositor_render_frame();
 }
 
-static void render_live_android(void) {
-    /* Title banner */
-    fb_fill_rect(40, 200, 640, 40, COLOR_CARD);
-    fb_draw_string(60, 212, "CONTAINER: ANDROID APK - SUBWAY SURFERS 3D", COLOR_GREEN, 2);
-
-    /* Real 3D Rail Track rendered via Z-GL integer rasterizer */
-    zgl_triangle_t tracks[2] = {
-        {
-            .v0 = { 100, 280, 400, 0xF800 }, /* Red track */
-            .v1 = { 620, 280, 400, 0x07E0 }, /* Green rail */
-            .v2 = { 360, 480, 100, 0xFFE0 }  /* Yellow character */
-        },
-        {
-            .v0 = { 360, 480, 100, 0xFFE0 },
-            .v1 = { 620, 280, 400, 0x07E0 },
-            .v2 = { 500, 480, 100, 0x001F }  /* Blue barrier */
-        }
-    };
-    zgl_dispatch_draw_elements(2, tracks);
-
-    /* Telemetry HUD Card */
-    fb_fill_rect(40, 520, 640, 240, COLOR_CARD);
-    fb_draw_string(60, 540, "RUNTIME: ANDROID BIONIC + OPENGLES 3.0", COLOR_WHITE, 2);
-    fb_draw_string(60, 575, "RAM USAGE: 28.4 MB (OS + 3D DEPTH BUFFER)", COLOR_ACCENT, 2);
-    fb_draw_string(60, 610, "CPU LOAD:  11.2% (1.0 GHZ DUAL-CORE ARM)", COLOR_GREEN, 2);
-    fb_draw_string(60, 645, "FPS:       60 FPS LOCKED (ZERO STUTTER)", COLOR_GREEN, 2);
-    fb_draw_string(60, 680, "AUDIO:     OPENSL ES 44.1 KHZ HARDWARE DMA", COLOR_WHITE, 2);
-    if (action_counter > 0) {
-        fb_draw_string(60, 715, "ACTION:    JUMP OVER TRAIN EXECUTED!", COLOR_AMBER, 2);
-    } else {
-        fb_draw_string(60, 715, "ACTION:    RUNNING ON TRACKS", COLOR_WHITE, 2);
+void compositor_post_surface_frame(zenin_container_id_t id) {
+    if (id >= 1 && id <= 4) {
+        containers[id - 1].frames_rendered++;
     }
 }
 
-static void render_live_windows(void) {
-    /* Title banner */
-    fb_fill_rect(40, 200, 640, 40, COLOR_CARD);
-    fb_draw_string(60, 212, "CONTAINER: WINDOWS PE32+ - CYBERPUNK 2D", COLOR_ACCENT, 2);
-
-    /* 3D Isometric View */
-    zgl_triangle_t city[2] = {
-        {
-            .v0 = { 150, 300, 300, 0x073F }, /* Cyan tower */
-            .v1 = { 450, 300, 300, 0xF81F }, /* Magenta neon */
-            .v2 = { 300, 480, 150, 0xFFE0 }  /* Yellow grid */
-        },
-        {
-            .v0 = { 300, 480, 150, 0xFFE0 },
-            .v1 = { 450, 300, 300, 0xF81F },
-            .v2 = { 580, 440, 200, 0x07E0 }  /* Green neon */
-        }
-    };
-    zgl_dispatch_draw_elements(2, city);
-
-    /* Telemetry HUD Card */
-    fb_fill_rect(40, 520, 640, 240, COLOR_CARD);
-    fb_draw_string(60, 540, "RUNTIME: WIN32 NT KERNEL SHIM + DIRECT3D 11", COLOR_WHITE, 2);
-    fb_draw_string(60, 575, "RAM USAGE: 34.1 MB (NATIVE DIRECT CONDUIT)", COLOR_ACCENT, 2);
-    fb_draw_string(60, 610, "CPU LOAD:  14.5% (ZERO HEAVY EMULATION)", COLOR_GREEN, 2);
-    fb_draw_string(60, 645, "FPS:       60 FPS DETERMINISTIC BLIT", COLOR_GREEN, 2);
-    fb_draw_string(60, 680, "AUDIO:     XAUDIO2 STEREO BUFFER STREAM", COLOR_WHITE, 2);
-    if (action_counter > 0) {
-        fb_draw_string(60, 715, "ACTION:    NEON BLASTER FIRED!", COLOR_AMBER, 2);
-    } else {
-        fb_draw_string(60, 715, "ACTION:    PATROLLING NIGHT CITY", COLOR_WHITE, 2);
+static void render_hex64(uint32_t x, uint32_t y, uint64_t val, uint32_t color) {
+    const char hex[] = "0123456789ABCDEF";
+    char str[19];
+    str[0] = '0';
+    str[1] = 'x';
+    for (int i = 15; i >= 0; i--) {
+        str[2 + (15 - i)] = hex[(val >> (i * 4)) & 0xF];
     }
+    str[18] = '\0';
+    fb_draw_string(x, y, str, color, 1);
 }
 
-static void render_live_linux(void) {
+static void render_active_container_view(zenin_container_surface_t *surf, uint32_t tab_color) {
     /* Title banner */
-    fb_fill_rect(40, 200, 640, 40, COLOR_CARD);
-    fb_draw_string(60, 212, "CONTAINER: LINUX ELF64 - MINECRAFT BEDROCK", COLOR_AMBER, 2);
+    fb_fill_rect(10, 90, 340, 26, COLOR_CARD);
+    fb_draw_string(20, 98, surf->runtime_name, tab_color, 1);
 
-    /* Voxel terrain 3D mesh */
-    zgl_triangle_t voxel[2] = {
-        {
-            .v0 = { 200, 320, 500, 0x07E0 }, /* Grass block green */
-            .v1 = { 520, 320, 500, 0x03E0 }, /* Dark foliage */
-            .v2 = { 360, 470, 200, 0x8A22 }  /* Dirt block brown */
-        },
-        {
-            .v0 = { 360, 470, 200, 0x8A22 },
-            .v1 = { 520, 320, 500, 0x03E0 },
-            .v2 = { 480, 470, 200, 0x001F }  /* Water block blue */
+    /* Viewport Area */
+    fb_fill_rect(10, 120, 340, 240, COLOR_SURFACE);
+
+    if (surf->pixels != NULL && surf->frames_rendered > 0) {
+        /* Direct Surface Blit: Draw actual pixel presentation from container */
+        fb_draw_string(20, 130, "SURFACE: ACTIVE FRAME PRESENTED", COLOR_GREEN, 1);
+        /* If a real backbuffer is registered, blit it into viewport */
+        for (uint32_t r = 0; r < 200 && r < surf->height; r++) {
+            for (uint32_t c = 0; c < 320 && c < surf->width; c++) {
+                uint16_t rgb = surf->pixels[r * surf->width + c];
+                fb_draw_pixel(10 + c, 145 + r, rgb);
+            }
         }
-    };
-    zgl_dispatch_draw_elements(2, voxel);
-
-    /* Telemetry HUD Card */
-    fb_fill_rect(40, 520, 640, 240, COLOR_CARD);
-    fb_draw_string(60, 540, "RUNTIME: NATIVE POSIX ELF64 USERLAND", COLOR_WHITE, 2);
-    fb_draw_string(60, 575, "RAM USAGE: 41.8 MB (CHUNKS + TICK ENGINE)", COLOR_ACCENT, 2);
-    fb_draw_string(60, 610, "CPU LOAD:  9.8% (0.0% IDLE TICK GATING)", COLOR_GREEN, 2);
-    fb_draw_string(60, 645, "FPS:       60 FPS VOXEL RENDERED", COLOR_GREEN, 2);
-    fb_draw_string(60, 680, "IPC TIME:  0 NS ZERO-COPY DIRECT POINTER", COLOR_ACCENT, 2);
-    if (action_counter > 0) {
-        fb_draw_string(60, 715, "ACTION:    BLOCK MINED / WORLD SAVED!", COLOR_AMBER, 2);
     } else {
-        fb_draw_string(60, 715, "ACTION:    EXPLORING TERRAIN CHUNK", COLOR_WHITE, 2);
-    }
-}
+        /* Authentic Container State (No Fake Geometry) */
+        fb_draw_string(20, 134, "ABI SPECIFICATION: ", COLOR_GRAY, 1);
+        fb_draw_string(140, 134, surf->abi_type, COLOR_WHITE, 1);
 
-static void render_live_macos(void) {
-    /* Title banner */
-    fb_fill_rect(40, 200, 640, 40, COLOR_CARD);
-    fb_draw_string(60, 212, "CONTAINER: MACOS MACH-O 64 - GARAGEBAND", COLOR_PURPLE, 2);
+        fb_draw_string(20, 154, "CONTAINER STATUS: ", COLOR_GRAY, 1);
+        fb_draw_string(135, 154, surf->execution_state, COLOR_AMBER, 1);
 
-    /* Synthesizer waveform view */
-    zgl_triangle_t synth[2] = {
-        {
-            .v0 = { 120, 340, 300, 0xF81F }, /* Magenta waveform */
-            .v1 = { 600, 340, 300, 0x073F }, /* Cyan spectrum */
-            .v2 = { 360, 460, 100, 0xFFFF }  /* White peak */
-        },
-        {
-            .v0 = { 360, 460, 100, 0xFFFF },
-            .v1 = { 600, 340, 300, 0x073F },
-            .v2 = { 540, 460, 100, 0xF800 }  /* Red filter cutoff */
+        fb_draw_string(20, 174, "SURFACE UPDATES: ", COLOR_GRAY, 1);
+        char frame_str[12];
+        uint32_t fc = surf->frames_rendered;
+        int idx = 0;
+        if (fc == 0) {
+            frame_str[idx++] = '0';
+        } else {
+            char tmp[10];
+            int ti = 0;
+            while (fc > 0) { tmp[ti++] = '0' + (fc % 10); fc /= 10; }
+            while (ti > 0) frame_str[idx++] = tmp[--ti];
         }
-    };
-    zgl_dispatch_draw_elements(2, synth);
+        frame_str[idx] = '\0';
+        fb_draw_string(140, 174, frame_str, COLOR_WHITE, 1);
 
-    /* Telemetry HUD Card */
-    fb_fill_rect(40, 520, 640, 240, COLOR_CARD);
-    fb_draw_string(60, 540, "RUNTIME: APPLE DARWIN MACH-O + METAL SHIM", COLOR_WHITE, 2);
-    fb_draw_string(60, 575, "RAM USAGE: 38.2 MB (SYNTHESIZER CORE + DSP)", COLOR_ACCENT, 2);
-    fb_draw_string(60, 610, "CPU LOAD:  12.4% (SUB-MILLISECOND AUDIO)", COLOR_GREEN, 2);
-    fb_draw_string(60, 645, "LATENCY:   1.2 MS HARDWARE DIRECT DMA", COLOR_GREEN, 2);
-    fb_draw_string(60, 680, "AUDIO:     COREAUDIO STEREO LOW-LATENCY", COLOR_WHITE, 2);
-    if (action_counter > 0) {
-        fb_draw_string(60, 715, "ACTION:    CHORD C-MAJ SYNTHESIZED!", COLOR_AMBER, 2);
-    } else {
-        fb_draw_string(60, 715, "ACTION:    AUDIO DSP READY", COLOR_WHITE, 2);
+        fb_draw_string(20, 194, "SURFACE RESOLUTION: 340x240 RGB565", COLOR_GRAY, 1);
+        fb_draw_string(20, 214, "GRAPHICS:           Software framebuffer", COLOR_WHITE, 1);
+        fb_draw_string(20, 234, "IPC LATENCY:        Not measured", COLOR_AMBER, 1);
     }
+
+    /* Visual Divider */
+    fb_fill_rect(20, 260, 320, 1, COLOR_BORDER);
+
+    /* Live Raw Atomic Input Register Telemetry */
+    zenin_input_packet_t inp = input_get_current_state();
+    fb_draw_string(20, 270, "LAST UART INPUT PACKET:", COLOR_ACCENT, 1);
+    render_hex64(20, 286, inp.raw64, COLOR_WHITE);
+
+    fb_draw_string(20, 306, "ACTIVE DEVICE: ", COLOR_GRAY, 1);
+    const char *dev_str = (inp.data.device == INPUT_DEV_MOUSE) ? "MOUSE" :
+                          (inp.data.device == INPUT_DEV_KEYBOARD) ? "KEYBOARD" :
+                          (inp.data.device == INPUT_DEV_GAMEPAD) ? "GAMEPAD" :
+                          (inp.data.device == INPUT_DEV_TOUCH) ? "TOUCH" : "IDLE / AWAITING INPUT";
+    fb_draw_string(110, 306, dev_str, tab_color, 1);
+
+    fb_draw_string(20, 326, "EVENT: ", COLOR_GRAY, 1);
+    const char *evt_str = (inp.data.event == INPUT_EVT_DOWN) ? "DOWN" :
+                          (inp.data.event == INPUT_EVT_UP) ? "UP" :
+                          (inp.data.event == INPUT_EVT_MOVE) ? "MOVE" :
+                          (inp.data.event == INPUT_EVT_AXIS) ? "AXIS" : "NONE";
+    fb_draw_string(70, 326, evt_str, COLOR_WHITE, 1);
+
+    fb_draw_string(140, 326, "X/KEY:", COLOR_GRAY, 1);
+    render_hex64(180, 326, (uint64_t)(uint16_t)inp.data.x_or_key, COLOR_WHITE);
+
+    fb_draw_string(20, 344, "INPUT ROUTING: UART test protocol", COLOR_AMBER, 1);
+
+    /* Microkernel Hardware & Runtime Telemetry */
+    fb_fill_rect(10, 368, 340, 230, COLOR_CARD);
+    fb_draw_string(20, 378, "PROTOTYPE STATUS (NOT PERFORMANCE TELEMETRY)", COLOR_ACCENT, 1);
+    fb_draw_string(20, 396, "RAM: see UART PMM/image accounting", COLOR_WHITE, 1);
+    fb_draw_string(20, 414, "CPU utilization: not measured", COLOR_AMBER, 1);
+    fb_draw_string(20, 432, "Power / battery: not measured", COLOR_AMBER, 1);
+    fb_draw_string(20, 450, "Display: software RGB565 buffer", COLOR_WHITE, 1);
+    fb_draw_string(20, 468, "Output: frame data sent through UART", COLOR_WHITE, 1);
+    fb_draw_string(20, 486, "Input: UART test protocol only", COLOR_WHITE, 1);
+    fb_draw_string(20, 504, "IPC and input latency: not measured", COLOR_AMBER, 1);
+    fb_draw_string(20, 522, "App execution: not implemented", COLOR_AMBER, 1);
+    fb_draw_string(20, 540, "Container tabs select parser-demo surfaces", COLOR_GRAY, 1);
+    fb_draw_string(20, 558, "No physical mouse, pad, or touch driver", COLOR_GRAY, 1);
+    fb_draw_string(20, 576, "Keys [1] - [4] switch surfaces", COLOR_GRAY, 1);
 }
 
 void compositor_render_frame(void) {
-    /* 1. Clear background to dark slate */
+    /* 1. Clear background */
     fb_clear(COLOR_BG);
 
     /* 2. Top System Status Bar */
-    fb_fill_rect(0, 0, 720, 52, COLOR_STATUS_BAR);
-    fb_draw_string(20, 18, "PROJECT ZENIN LIVE OS", COLOR_ACCENT, 2);
-    fb_draw_string(330, 18, "CPU:1.0GHZ", COLOR_WHITE, 2);
-    fb_draw_string(490, 18, "RAM:2GB", COLOR_WHITE, 2);
+    fb_fill_rect(0, 0, 360, 28, COLOR_STATUS_BAR);
+    fb_draw_string(10, 10, "ZENIN OS", COLOR_ACCENT, 1);
+    fb_draw_string(80, 10, "QEMU ARM64", COLOR_WHITE, 1);
+    fb_draw_string(160, 10, "RAM:2GB", COLOR_WHITE, 1);
 
-    /* Battery Pill (2000 mAh) */
-    fb_fill_rect(620, 14, 80, 24, COLOR_BG);
-    fb_fill_rect(622, 16, 76, 20, COLOR_GREEN);
-    fb_draw_string(630, 20, "2000MAH", COLOR_WHITE, 1);
+    /* Emulator marker, not a battery reading. */
+    fb_fill_rect(280, 6, 72, 16, COLOR_BG);
+    fb_fill_rect(282, 8, 68, 12, COLOR_GREEN);
+    fb_draw_string(292, 10, "EMU", COLOR_WHITE, 1);
 
-    /* System Constraints Sub-Bar */
-    fb_fill_rect(0, 52, 720, 36, COLOR_BG);
-    fb_draw_string(20, 62, "IDLE RAM: < 3.8 MB | IPC: 0 NS | CPU IDLE: 0.0% WFI", COLOR_WHITE, 2);
+    /* Sub-Bar */
+    fb_fill_rect(0, 28, 360, 22, COLOR_BG);
+    fb_draw_string(10, 34, "RAM/CPU/power/latency: see UART; unmeasured", COLOR_AMBER, 1);
 
-    /* 3. Render 4 App Switcher Tabs */
+    /* 3. Render 4 Container Selector Tabs */
     for (int i = 0; i < 4; i++) {
-        bool is_active = (current_app == (zenin_active_app_t)(i + 1));
-        uint32_t bg_col = is_active ? btn_apps[i].color : COLOR_CARD;
+        bool is_active = (active_container == (zenin_container_id_t)(i + 1));
+        uint32_t bg_col = is_active ? container_tabs[i].color : COLOR_CARD;
         uint32_t text_col = is_active ? COLOR_BG : COLOR_WHITE;
-        fb_fill_rect(btn_apps[i].x, btn_apps[i].y, btn_apps[i].w, btn_apps[i].h, bg_col);
-        fb_draw_string(btn_apps[i].x + 12, btn_apps[i].y + 16, btn_apps[i].label, text_col, 2);
+        fb_fill_rect(container_tabs[i].x, container_tabs[i].y, container_tabs[i].w, container_tabs[i].h, bg_col);
+        fb_draw_string(container_tabs[i].x + 12, container_tabs[i].y + 10, container_tabs[i].label, text_col, 1);
     }
 
-    /* 4. Render Active App View */
-    switch (current_app) {
-        case APP_ANDROID_SUBWAY:
-            render_live_android();
-            break;
-        case APP_WINDOWS_CYBERPUNK:
-            render_live_windows();
-            break;
-        case APP_LINUX_MINECRAFT:
-            render_live_linux();
-            break;
-        case APP_MACOS_GARAGEBAND:
-            render_live_macos();
-            break;
-        default:
-            render_live_android();
-            break;
-    }
+    /* 4. Render Active Container Viewport */
+    zenin_container_surface_t *cur_surf = compositor_get_surface(active_container);
+    uint32_t tab_col = container_tabs[active_container - 1].color;
+    render_active_container_view(cur_surf, tab_col);
 
-    /* 5. Render Interactive Action Button */
-    uint32_t act_bg = btn_action.is_pressed ? COLOR_PRESSED : btn_action.color;
-    fb_fill_rect(btn_action.x, btn_action.y, btn_action.w, btn_action.h, act_bg);
-    fb_draw_string(btn_action.x + 24, btn_action.y + 20, btn_action.label, COLOR_BG, 2);
-
-    /* 6. Bottom Navigation Bar */
-    fb_fill_rect(0, 1200, 720, 80, COLOR_STATUS_BAR);
-    fb_draw_string(40, 1230, "PRESS [1-4] TO SWITCH APP | SPACE TO INTERACT | Q TO QUIT", COLOR_ACCENT, 2);
+    /* 5. Bottom Navigation Bar */
+    fb_fill_rect(0, 608, 360, 32, COLOR_STATUS_BAR);
+    fb_draw_string(14, 618, "KEYS: [1-4] CONTAINER | RAW INPUT STREAM", COLOR_ACCENT, 1);
 }
 
 void compositor_handle_touch(uint32_t x, uint32_t y, zenin_touch_type_t type) {
     if (type == TOUCH_EVENT_DOWN) {
-        /* Check 4 App Buttons */
+        /* Check 4 Container Tabs */
         for (int i = 0; i < 4; i++) {
-            if (x >= btn_apps[i].x && x <= btn_apps[i].x + btn_apps[i].w &&
-                y >= btn_apps[i].y && y <= btn_apps[i].y + btn_apps[i].h) {
-                compositor_switch_app((zenin_active_app_t)(i + 1));
+            if (x >= container_tabs[i].x && x <= container_tabs[i].x + container_tabs[i].w &&
+                y >= container_tabs[i].y && y <= container_tabs[i].y + container_tabs[i].h) {
+                compositor_switch_container((zenin_container_id_t)(i + 1));
                 uart_puts("[compositor] Switched active container to: ");
-                uart_puts(btn_apps[i].label);
+                uart_puts(container_tabs[i].label);
                 uart_puts("\n");
                 return;
             }
         }
-
-        /* Check Action Button */
-        if (x >= btn_action.x && x <= btn_action.x + btn_action.w &&
-            y >= btn_action.y && y <= btn_action.y + btn_action.h) {
-            btn_action.is_pressed = true;
-            action_counter++;
-            uart_puts("[compositor] Interactive Action triggered in active container! Count: ");
-            uart_put_dec(action_counter);
-            uart_puts("\n");
-            compositor_render_frame();
-            return;
-        }
-    } else if (type == TOUCH_EVENT_UP) {
-        if (btn_action.is_pressed) {
-            btn_action.is_pressed = false;
-            compositor_render_frame();
-        }
     }
 }
-

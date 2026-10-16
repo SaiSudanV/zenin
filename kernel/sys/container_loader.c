@@ -89,9 +89,8 @@ typedef struct {
 } __attribute__((packed)) macho64_header_t;
 
 void container_subsystem_init(void) {
-    uart_puts("[zenin-container] Universal Real Binary Container Subsystem Initialized.\n");
-    uart_puts("                  Active Parsers: Linux ELF64 | Win32 PE32+ | Apple Mach-O 64 | Android APK.\n");
-    uart_puts("                  RAM Allocation Mode: Zero-Copy On-Demand Streaming (< 1 MB Overhead).\n");
+    uart_puts("[zenin-container] Binary format parser prototypes initialized.\n");
+    uart_puts("                  Loading, relocation, isolation, and execution are not implemented.\n");
 }
 
 /* ========================================================================= */
@@ -119,7 +118,7 @@ bool container_load_elf64(const void *file_buffer, size_t file_size, zenin_loade
     out_bin->total_sections = hdr->e_phnum;
     out_bin->is_valid = true;
 
-    uart_puts("[container-elf64] Successfully parsed real Linux ELF64 binary:\n");
+    uart_puts("[container-elf64] Supplied ELF64 header passed basic format checks:\n");
     uart_puts("                  Entry Point: 0x");
     uart_put_hex(out_bin->entry_point);
     uart_puts(" | Program Headers: 0x");
@@ -155,7 +154,7 @@ bool container_load_pe32(const void *file_buffer, size_t file_size, zenin_loaded
     out_bin->total_sections = pe->num_sections;
     out_bin->is_valid = true;
 
-    uart_puts("[container-pe32] Successfully parsed real Windows PE32+ binary:\n");
+    uart_puts("[container-pe32] Supplied PE header passed basic format checks:\n");
     uart_puts("                 Base Address: 0x");
     uart_put_hex(out_bin->base_address);
     uart_puts(" | Entry Point: 0x");
@@ -185,7 +184,7 @@ bool container_load_macho64(const void *file_buffer, size_t file_size, zenin_loa
     out_bin->total_sections = macho->ncmds;
     out_bin->is_valid = true;
 
-    uart_puts("[container-macho64] Successfully parsed real Apple Mach-O 64 binary:\n");
+    uart_puts("[container-macho64] Supplied Mach-O header passed basic format checks:\n");
     uart_puts("                    CPU Type: ARM64 | Load Commands: 0x");
     uart_put_hex(macho->ncmds);
     uart_puts(" | File Size: 0x");
@@ -215,22 +214,18 @@ bool container_load_apk(const void *file_buffer, size_t file_size, zenin_loaded_
     out_bin->total_sections = 1;
     out_bin->is_valid = true;
 
-    uart_puts("[container-apk] Successfully parsed real Android APK container:\n");
-    uart_puts("                Mounted ZIP Central Directory -> Native ARM64-v8a loader ready.\n");
+    uart_puts("[container-apk] Supplied ZIP header accepted as an APK candidate.\n");
+    uart_puts("                ZIP central directory and native library have not been loaded.\n");
 
     return true;
 }
 
 int container_execute(const zenin_loaded_binary_t *bin) {
     if (!bin || !bin->is_valid) return -1;
-
-    uart_puts("[container-exec] Dispatching execution context for: ");
+    uart_puts("[zenin-container] Refused execution of ");
     uart_puts(bin->name);
-    uart_puts("\n                 Entry Target: 0x");
-    uart_put_hex(bin->entry_point);
-    uart_puts(" | Hardware Execution: Native AArch64 (0 ns context switch)\n");
-
-    return 0;
+    uart_puts(": parser metadata is not a loaded process.\n");
+    return -2;
 }
 
 /* Static immutable test binary payloads placed safely in .rodata */
@@ -294,4 +289,3 @@ bool container_run_all_tests(void) {
 
     return true;
 }
-

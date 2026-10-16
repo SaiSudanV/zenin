@@ -70,13 +70,20 @@ bool zenin_irq_init(void) {
     uart_put_dec((uint32_t)timer_frequency);
     uart_puts(" Hz\n");
 
-    /* Detect the GIC architecture version and program it accordingly so the
-     * image boots on GICv2 (QEMU virt) and GICv3 (Ampere/Graviton) alike.
-     * GICD_PIDR2 auto-detection faults on QEMU virt's GICv2 (0xFFE8 is not
-     * modelled), so the version is compile-time: ZENIN_GIC_VERSION=2 (default,
-     * QEMU virt) or 3 (real GICv3 silicon). A fault-safe PIDR2 probe is the
-     * remaining refinement. */
-    const uint32_t gic_ver = ZENIN_GIC_VERSION;
+    /* Detect the GIC CPU-interface version from ID_AA64PFR0_EL1[27:24] (the GIC
+     * field): 0=none, 1=GICv3/v4 sysregs, 2=GICv2, 3=both. This is a system
+     * register read (always available at EL1, no MMIO), so it is fault-safe on
+     * QEMU virt — unlike a GICD_PIDR2 MMIO probe, which faults on QEMU virt's
+     * GICv2. Prefer the GICv3 system-register interface when present. */
+    uint64_t pfr0_el1;
+    __asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(pfr0_el1));
+    uint32_t gic_field = (uint32_t)((pfr0_el1 >> 24) & 0xF);
+    uint32_t gic_ver = (gic_field & 0x1) ? 3 : 2;
+    uart_puts("[zenin-irq] ID_AA64PFR0.GIC=");
+    uart_put_dec(gic_field);
+    uart_puts("; using GICv");
+    uart_put_dec(gic_ver);
+    uart_puts("\n");
     if (gic_ver == 3) {
         /* GICv3: system-register CPU interface + GICR redistributor. */
         GICD_CTLR = 0;

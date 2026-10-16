@@ -1,12 +1,44 @@
 /*
- * Project Zenin - Lightweight INT4 On-Device Neural Engine Implementation
- * Bare-metal feed-forward quantized inference optimized for 1.0 GHz ARM Cortex-A53.
+ * Project Zenin - Experimental fixed-weight intent classifier.
+ * Training provenance, quantization format, accuracy, and performance are unverified.
  */
 
 #include "../include/neural_core.h"
 #include "../include/uart.h"
 
-/* Pre-quantized trained weights for common mobile device operations */
+static int32_t dot_i8_scalar(const int8_t *weights, const int8_t *input) {
+    int32_t sum = 0;
+    for (int i = 0; i < NEURAL_INPUT_DIM; i++) {
+        sum += (int32_t)weights[i] * (int32_t)input[i];
+    }
+    return sum;
+}
+
+/* Exact signed INT8 dot product using baseline AArch64 Advanced SIMD/NEON.
+ * The kernel enables FP/SIMD access before kmain. The scalar fallback keeps
+ * this neural source portable, but other architecture ports need their own
+ * feature detection/build validation before claiming acceleration. */
+static int32_t dot_i8_accelerated(const int8_t *weights, const int8_t *input) {
+#if defined(__aarch64__)
+    int32_t sum;
+    __asm__ volatile(
+        "movi v0.8h, #0\n"
+        "ld1 {v1.16b}, [%1]\n"
+        "ld1 {v2.16b}, [%2]\n"
+        "smlal v0.8h, v1.8b, v2.8b\n"
+        "smlal2 v0.8h, v1.16b, v2.16b\n"
+        "saddlv s3, v0.8h\n"
+        "umov %w0, v3.s[0]\n"
+        : "=r"(sum)
+        : "r"(weights), "r"(input)
+        : "v0", "v1", "v2", "v3", "memory");
+    return sum;
+#else
+    return dot_i8_scalar(weights, input);
+#endif
+}
+
+/* Hand-authored prototype weights; this is not a validated trained model. */
 static const zenin_neural_weights_t model_weights = {
     .w1 = {
         {  2,  4, -1,  0,  3,  1,  2, -3,  0,  2,  1, -1,  4,  0,  1,  2 },
@@ -38,8 +70,32 @@ static const zenin_neural_weights_t model_weights = {
     .b2 = { 0, 3, 2, 1, 1, 0 }
 };
 
+bool neural_core_backend_selftest(void) {
+    int8_t input[8][NEURAL_INPUT_DIM];
+    for (int vector = 0; vector < 8; vector++) {
+        for (int i = 0; i < NEURAL_INPUT_DIM; i++) {
+            if (vector == 0) input[vector][i] = INT8_MAX;
+            else if (vector == 1) input[vector][i] = INT8_MIN;
+            else if (vector == 2) input[vector][i] = (i & 1) ? INT8_MAX : INT8_MIN;
+            else input[vector][i] = (int8_t)(((vector * 11 + i * 7) % 31) - 15);
+        }
+    }
+    for (int vector = 0; vector < 8; vector++) {
+        for (int row = 0; row < NEURAL_HIDDEN_DIM; row++) {
+            int32_t scalar = dot_i8_scalar(model_weights.w1[row], input[vector]);
+            int32_t accelerated = dot_i8_accelerated(model_weights.w1[row], input[vector]);
+            if (scalar != accelerated) return false;
+        }
+    }
+    return true;
+}
+
 void neural_core_init(void) {
-    uart_puts("[zenin-ai] Initialized INT4 Quantized Neural Engine (16x16x6 architecture).\n");
+#if defined(__aarch64__)
+    uart_puts("[zenin-ai] AArch64 NEON first-layer kernel enabled; model quality is unverified.\n");
+#else
+    uart_puts("[zenin-ai] Scalar experimental classifier enabled; model quality is unverified.\n");
+#endif
 }
 
 /* Fast ReLU activation */
@@ -74,14 +130,11 @@ zenin_neural_intent_t neural_core_predict(const int8_t *input_features, int32_t 
     int32_t hidden[NEURAL_HIDDEN_DIM];
     for (int h = 0; h < NEURAL_HIDDEN_DIM; h++) {
         int32_t sum = model_weights.b1[h];
-        for (int i = 0; i < NEURAL_INPUT_DIM; i++) {
-            sum += (int32_t)model_weights.w1[h][i] * (int32_t)input_features[i];
-        }
+        sum += dot_i8_accelerated(model_weights.w1[h], input_features);
         hidden[h] = relu(sum);
     }
 
     /* Output layer calculation: O = W2 * H + B2 */
-    int32_t output[NEURAL_OUTPUT_DIM];
     int32_t max_val = -999999;
     zenin_neural_intent_t best_intent = NEURAL_INTENT_UNKNOWN;
 
@@ -90,7 +143,6 @@ zenin_neural_intent_t neural_core_predict(const int8_t *input_features, int32_t 
         for (int h = 0; h < NEURAL_HIDDEN_DIM; h++) {
             sum += (int32_t)model_weights.w2[o][h] * hidden[h];
         }
-        output[o] = sum;
         if (sum > max_val) {
             max_val = sum;
             best_intent = (zenin_neural_intent_t)o;

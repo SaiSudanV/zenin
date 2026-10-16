@@ -281,7 +281,12 @@ def make_sparse(path):
 def build_uefi_disk(boot_efi, kernel_flat, out_img):
     """Assemble a deterministic FAT16 superfloppy with the EFI boot path."""
     workdir = os.path.dirname(out_img)
-    wsl_dir = "/mnt/" + workdir[0].lower() + "/" + workdir[3:].replace("\\", "/")
+    if os.name == "nt":
+        wd = "/mnt/" + workdir[0].lower() + "/" + workdir[3:].replace("\\", "/")
+        shell = ["wsl", "-d", "kali-linux", "--", "bash", "-c"]
+    else:
+        wd = workdir
+        shell = ["bash", "-c"]
     size_mib = 64
     cmd = (
         "set -e; cd '{wd}' && "
@@ -291,7 +296,7 @@ def build_uefi_disk(boot_efi, kernel_flat, out_img):
         "mmd -i uefi_disk.img ::/EFI ::/EFI/BOOT ::/ZENIN && "
         "mcopy -i uefi_disk.img BOOTAA64.EFI.src ::/EFI/BOOT/BOOTAA64.EFI && "
         "mcopy -i uefi_disk.img OS.IMG.src ::/ZENIN/OS.IMG"
-    ).format(wd=wsl_dir, n=size_mib)
+    ).format(wd=wd, n=size_mib)
     with open(os.path.join(workdir, "BOOTAA64.EFI.src"), "wb") as f:
         f.write(open(boot_efi, "rb").read())
     with open(os.path.join(workdir, "OS.IMG.src"), "wb") as f:
@@ -328,6 +333,7 @@ def main():
         open(out_img, "wb").write(f.read())
 
     pfx = args.toolchain_prefix
+    ext = ".exe" if os.name == "nt" else ""
     boot_efi = os.path.join(DIST_DIR, "BOOTAA64.EFI")
     with open(boot_efi, "wb") as f:
         f.write(build_uefi_stub(pfx + "gcc.exe", pfx + "ld.exe",

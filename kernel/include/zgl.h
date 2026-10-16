@@ -38,7 +38,7 @@ void zgl_draw_triangle(const zgl_vertex_t *v0, const zgl_vertex_t *v1, const zgl
 /* Universal GLES / Direct3D / Metal translation bridge */
 void zgl_dispatch_draw_elements(uint32_t count, const zgl_triangle_t *triangles);
 
-/* Query live 3D engine metrics */
+/* FPS is UINT32_MAX until a timed presentation path is implemented. */
 void zgl_get_metrics(uint32_t *out_fps, uint32_t *out_poly_count, size_t *out_vram_kb);
 
 #endif /* ZENIN_ZGL_H */

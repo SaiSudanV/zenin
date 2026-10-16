@@ -176,34 +176,47 @@ typedef struct {
 } efi_mem_desc;
 
 /* Boot handoff descriptor — must match kernel/include/boot_info.h. */
-typedef struct { u64 base; u64 pages; } zenin_ram_region_t;
+typedef struct { u64 base; u64 pages; } zenin_boot_range_t;
 typedef struct {
-    u64 magic; u64 kernel_start; u64 kernel_end; u64 ram_count;
+    u64 magic; u64 kernel_start; u64 kernel_end; u64 ram_count; u64 mmio_count;
 } zenin_boot_info_t;
 #define ZENIN_BOOT_INFO_MAGIC 0x5A454E49424F4F54ULL
 #define ZENIN_BOOT_INFO_MAX_REGIONS 64
+/* Layout: [header][ram[0..MAX)][mmio[0..MAX)] (fixed split, matches boot_info.h). */
 static u8 boot_info_storage[sizeof(zenin_boot_info_t) +
-                            ZENIN_BOOT_INFO_MAX_REGIONS * sizeof(zenin_ram_region_t)];
+                            2u * ZENIN_BOOT_INFO_MAX_REGIONS * sizeof(zenin_boot_range_t)];
 
 /* Build the boot-info from the firmware memory map: collect usable RAM regions
- * (conventional + loader/boot-services, which the OS may reclaim after
- * ExitBootServices). Excludes reserved/runtime/ACPI/MMIO types. */
+ * (conventional + loader/boot-services, reclaimable after ExitBootServices) as
+ * RAM, and memory-mapped I/O / reserved ranges as device (MMIO) windows the
+ * identity map must map as device memory. */
 static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
                              u64 kernel_start, u64 kernel_end) {
     zenin_boot_info_t *bi = (zenin_boot_info_t *)boot_info_storage;
-    zenin_ram_region_t *regions = (zenin_ram_region_t *)(bi + 1);
+    zenin_boot_range_t *regions = (zenin_boot_range_t *)(bi + 1);
+    zenin_boot_range_t *mmio = regions + ZENIN_BOOT_INFO_MAX_REGIONS;
     bi->magic = ZENIN_BOOT_INFO_MAGIC;
     bi->kernel_start = kernel_start;
     bi->kernel_end = kernel_end;
     bi->ram_count = 0;
+    bi->mmio_count = 0;
     u64 off = 0;
-    while (off + desc_size <= map_size && bi->ram_count < ZENIN_BOOT_INFO_MAX_REGIONS) {
+    while (off + desc_size <= map_size) {
         efi_mem_desc *d = (efi_mem_desc *)((u8 *)map + off);
         if (d->type == 7 /* EfiConventionalMemory */ ||
             (d->type >= 1 && d->type <= 4) /* Loader/BootServices */) {
-            regions[bi->ram_count].base = d->phys_start;
-            regions[bi->ram_count].pages = d->num_pages;
-            bi->ram_count++;
+            if (bi->ram_count < ZENIN_BOOT_INFO_MAX_REGIONS) {
+                regions[bi->ram_count].base = d->phys_start;
+                regions[bi->ram_count].pages = d->num_pages;
+                bi->ram_count++;
+            }
+        } else if (d->type == 11 /* EfiMemoryMappedIO */ ||
+                   d->type == 0 /* EfiReservedMemoryType */) {
+            if (bi->mmio_count < ZENIN_BOOT_INFO_MAX_REGIONS) {
+                mmio[bi->mmio_count].base = d->phys_start;
+                mmio[bi->mmio_count].pages = d->num_pages;
+                bi->mmio_count++;
+            }
         }
         off += desc_size;
     }

@@ -155,26 +155,25 @@ const zenin_framebuffer_t *fb_get_info(void) {
 
 void fb_dump_frame(void) {
     if (!fb_device.buffer) return;
+
+    uart_puts("[zenin-framebuffer] Exporting software framebuffer bytes over UART.\n");
     uart_puts("---FRAME_START---\n");
-    /* Dump downscaled 180x320 16-bit RGB565 matrix for ultra-fast 0-delay display mirror */
-    uint32_t step_x = fb_device.width / 180;
-    uint32_t step_y = fb_device.height / 320;
+    const char hex_digits[] = "0123456789ABCDEF";
     uint16_t *buf = (uint16_t *)fb_device.buffer;
 
-    for (uint32_t y = 0; y < 320; y++) {
-        uint32_t src_row = y * step_y * fb_device.width;
-        for (uint32_t x = 0; x < 180; x++) {
-            uint16_t pixel = buf[src_row + (x * step_x)];
-            /* Output 4 hex chars */
-            const char hex_chars[] = "0123456789ABCDEF";
-            uart_putc(hex_chars[(pixel >> 12) & 0xF]);
-            uart_putc(hex_chars[(pixel >> 8) & 0xF]);
-            uart_putc(hex_chars[(pixel >> 4) & 0xF]);
-            uart_putc(hex_chars[pixel & 0xF]);
+    /* Diagnostic serialization only; this is not hardware display scanout. */
+    for (uint32_t y = 0; y < fb_device.height; y++) {
+        uint32_t row_idx = y * fb_device.width;
+        for (uint32_t x = 0; x < fb_device.width; x++) {
+            uint16_t pixel = buf[row_idx + x];
+            uart_putc(hex_digits[(pixel >> 12) & 0xF]);
+            uart_putc(hex_digits[(pixel >> 8) & 0xF]);
+            uart_putc(hex_digits[(pixel >> 4) & 0xF]);
+            uart_putc(hex_digits[pixel & 0xF]);
         }
         uart_putc('\n');
     }
     uart_puts("---FRAME_END---\n");
+    uart_puts("[zenin-framebuffer] UART framebuffer export complete.\n");
 }
-
 

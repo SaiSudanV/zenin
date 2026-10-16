@@ -35,7 +35,8 @@ master_core:
 
     /* 3. Initialized state is pre-baked in the image (D011 A6):
      *    -fno-zero-initialized-in-bss leaves no runtime .bss zeroing. */
-    /* Enter the current AArch64 identity-mapped RAM/MMIO regime. */
+    /* Enter the memory-map-driven identity-mapped RAM/MMIO regime. */
+    mov     x0, x19
     bl      arch_mmu_enable
     /* 4. Jump to C Kernel Main (x0 = boot-info pointer from the UEFI stub) */
     mov     x0, x19

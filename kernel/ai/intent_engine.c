@@ -1,12 +1,14 @@
 /*
  * Project Zenin - Native AI Context Aggregator & Intent Dispatcher Implementation
- * Bridges natural language/multimodal tokens to real hardware system calls.
- * Execution Time: < 50 nanoseconds per intent resolution.
+ * Provides keyword intent prototypes and reports only context fields with
+ * implemented data sources. This is not a natural-language model or a
+ * hardware action executor.
  */
 
 #include "../include/ai_core.h"
 #include "../include/zbus.h"
 #include "../include/pmm.h"
+#include "../include/compositor.h"
 
 /* Fast string prefix and exact match helpers for freestanding C */
 static bool str_contains(const char *haystack, const char *needle) {
@@ -27,11 +29,17 @@ void zenin_ai_init(void) {
 
 void zenin_ai_get_context(zenin_system_context_t *out_ctx) {
     if (!out_ctx) return;
-    out_ctx->battery_percent = 92;
+    out_ctx->valid_fields = ZENIN_CONTEXT_MEMORY_VALID | ZENIN_CONTEXT_ACTIVE_SURFACE_VALID;
+    out_ctx->battery_percent = 0;
     out_ctx->is_charging = false;
     out_ctx->free_ram_mb = (pmm_get_free_pages() * 4096) / (1024 * 1024);
-    out_ctx->cpu_clock_mhz = 1000; /* 1.0 GHz Baseline */
-    out_ctx->active_app_title = "Zenin Neural Shell";
+    out_ctx->total_ram_mb = (pmm_get_total_pages() * 4096) / (1024 * 1024);
+    out_ctx->cpu_clock_mhz = 0;
+    zenin_container_id_t active = compositor_get_active_container();
+    zenin_container_surface_t *surface = compositor_get_surface(active);
+    out_ctx->active_container_id = (uint32_t)active;
+    out_ctx->active_surface_name = surface ? surface->runtime_name : NULL;
+    out_ctx->network_status = NULL;
 }
 
 zenin_ai_action_t zenin_ai_resolve_intent(const char *prompt_or_trigger) {

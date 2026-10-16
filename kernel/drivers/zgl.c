@@ -1,7 +1,5 @@
 /*
- * Project Zenin - Universal Low-Memory 3D Graphics Engine (Z-GL) Implementation
- * High-speed triangle rasterizer, depth buffer, and multi-OS graphics translator.
- * Uses 100% integer calculations for screen coordinates to guarantee 0 FP traps.
+ * Project Zenin - Integer software triangle rasterizer prototype.
  */
 
 #include "../include/zgl.h"
@@ -29,10 +27,8 @@ void zgl_init(uint32_t width, uint32_t height) {
     }
     zgl_depth_buffer = (uint16_t *)first_page;
 
-    uart_puts("[zenin-zgl] Initialized Universal 3D Rasterizer (Z-GL):\n");
-    uart_puts("            Resolution: 720x1280 | Color Mode: 16-bit RGB565\n");
-    uart_puts("            Depth Testing: 16-bit On-Demand Z-Buffer (~1.84 MB)\n");
-    uart_puts("            Ready for Android GLES, Windows D3D, and macOS Metal draws.\n");
+    uart_puts("[zenin-zgl] Integer software triangle rasterizer initialized.\n");
+    uart_puts("            API translation and frame-rate measurement are not implemented.\n");
 }
 
 void zgl_clear(uint16_t color) {
@@ -112,7 +108,7 @@ void zgl_dispatch_draw_elements(uint32_t count, const zgl_triangle_t *triangles)
 }
 
 void zgl_get_metrics(uint32_t *out_fps, uint32_t *out_poly_count, size_t *out_vram_kb) {
-    if (out_fps) *out_fps = 60;
+    if (out_fps) *out_fps = UINT32_MAX;
     if (out_poly_count) *out_poly_count = rendered_polys;
     if (out_vram_kb) *out_vram_kb = (zgl_w * zgl_h * sizeof(uint16_t) * 2) / 1024;
 }
