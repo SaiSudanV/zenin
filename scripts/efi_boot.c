@@ -292,21 +292,22 @@ efi_status efi_main(efi_handle image, efi_system_table *st) {
     s = bs->allocate_pool(1u /* EfiLoaderData */, map_size, &map);
     if (s != EFI_SUCCESS) { dbg("ZENIN-EFI: alloc-pool err "); dbg_hex(s); return s; }
     u64 actual_map_size = 0;
+    void *boot_info = NULL;
     for (int attempt = 0; attempt < 8; ++attempt) {
         u64 ms = map_size;
         s = bs->get_memory_map(&ms, map, &map_key, &desc_size, &desc_ver);
         if (s != EFI_SUCCESS) { dbg("ZENIN-EFI: memmap err "); dbg_hex(s); return s; }
         actual_map_size = ms;
+        /* Build boot-info BEFORE ExitBootServices. The map buffer and the C
+         * stack live in boot-services/loader memory that is reclaimed at exit,
+         * so walking them afterwards reads reclaimed garbage and runs away. */
+        boot_info = build_boot_info(map, actual_map_size, desc_size,
+                                    EFI_LOAD_ADDRESS, EFI_LOAD_ADDRESS + image_size);
         s = bs->exit_boot_services(image, map_key);
         if (s == EFI_SUCCESS) break;
     }
     if (s != EFI_SUCCESS) { dbg("ZENIN-EFI: exit-boot-services err "); dbg_hex(s); return s; }
     dbg("ZENIN-EFI: boot services exited\n");
-
-    /* Stream C: hand the discovered memory map to the kernel so it sizes the
-     * PMM against real RAM instead of a hardcoded QEMU layout (Goal 1.6). */
-    void *boot_info = build_boot_info(map, actual_map_size, desc_size,
-                                      EFI_LOAD_ADDRESS, EFI_LOAD_ADDRESS + image_size);
     jump_to_kernel((void *)EFI_LOAD_ADDRESS, boot_info);
     return EFI_SUCCESS;
 }
