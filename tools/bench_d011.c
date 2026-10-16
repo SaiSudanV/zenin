@@ -318,7 +318,9 @@ int main(void) {
         kheap_static_free(&latency_slots);
     }
 
-    /* 8c. Cold PMM: extracted pmm.c alloc/free vs baseline bitmap pop/clear. */
+    /* 8c. Cold PMM: extracted pmm.c alloc/free vs baseline bitmap pop/clear.
+     * Many-ops bracket (K per sample, min-of-total) so the total sits well
+     * above one timer tick and delta resolves below tick granularity. */
     static uint8_t os_bm[65536];
     os_bitmap = os_bm;
     os_ram_base = 0x400000000ULL;
@@ -334,28 +336,28 @@ int main(void) {
     latency_pmm_total_pages_g = 524288u;
     latency_pmm_reserved_g = 16u;
 
+    enum { K = 32 };
     uint64_t pmm_base_min = UINT64_MAX, pmm_os_min = UINT64_MAX;
     uint64_t pmm_free_base_min = UINT64_MAX, pmm_free_os_min = UINT64_MAX;
-    for (uint32_t rep = 0; rep < 512; rep++) {
+    for (uint32_t rep = 0; rep < 128; rep++) {
+        void *pg[K], *tok[K];
         uint64_t t = read_cycles();
-        void *pg = os_pmm_alloc_page();
+        for (int i = 0; i < K; i++) pg[i] = os_pmm_alloc_page();
         uint64_t e = read_cycles() - t;
-        if (!pg) return 1;
         if (e < pmm_os_min) pmm_os_min = e;
 
         t = read_cycles();
-        os_pmm_free_page(pg);
+        for (int i = 0; i < K; i++) os_pmm_free_page(pg[i]);
         e = read_cycles() - t;
         if (e < pmm_free_os_min) pmm_free_os_min = e;
 
         t = read_cycles();
-        void *tok = baseline_pmm_pop();
+        for (int i = 0; i < K; i++) tok[i] = baseline_pmm_pop();
         e = read_cycles() - t;
-        if (!tok) return 1;
         if (e < pmm_base_min) pmm_base_min = e;
 
         t = read_cycles();
-        baseline_pmm_clear(tok);
+        for (int i = 0; i < K; i++) baseline_pmm_clear(tok[i]);
         e = read_cycles() - t;
         if (e < pmm_free_base_min) pmm_free_base_min = e;
     }
@@ -364,33 +366,34 @@ int main(void) {
     slab_init(slab_page, &slab_free_head);
     slab_init(latency_slab, &latency_free_head);
 
+    enum { HK = 16 };
     uint64_t heap_base_min = UINT64_MAX, heap_os_min = UINT64_MAX;
     uint64_t heap_free_base_min = UINT64_MAX, heap_free_os_min = UINT64_MAX;
-    for (uint32_t rep = 0; rep < 512; rep++) {
+    for (uint32_t rep = 0; rep < 128; rep++) {
+        void *objs[HK], *bobjs[HK];
         uint64_t t = read_cycles();
-        void *obj = os_heap_alloc();
+        for (int i = 0; i < HK; i++) objs[i] = os_heap_alloc();
         uint64_t e = read_cycles() - t;
-        if (!obj) return 1;
         if (e < heap_os_min) heap_os_min = e;
 
         t = read_cycles();
-        os_heap_free(obj);
+        for (int i = 0; i < HK; i++) os_heap_free(objs[i]);
         e = read_cycles() - t;
         if (e < heap_free_os_min) heap_free_os_min = e;
 
         t = read_cycles();
-        void *bobj = baseline_heap_alloc();
+        for (int i = 0; i < HK; i++) bobjs[i] = baseline_heap_alloc();
         e = read_cycles() - t;
-        if (!bobj) return 1;
         if (e < heap_base_min) heap_base_min = e;
 
         t = read_cycles();
-        baseline_heap_free(bobj);
+        for (int i = 0; i < HK; i++) baseline_heap_free(bobjs[i]);
         e = read_cycles() - t;
         if (e < heap_free_base_min) heap_free_base_min = e;
     }
 
     printf("\nZenin D011 OS-added latency vs minimal-correct baseline (real cycles)\n");
+    printf("many-ops bracket: min-over-samples total for K ops (K=32 PMM, K=16 heap)\n");
     printf("======================================================================\n");
     int fails = 0;
     report("Hot-tier arena/slot alloc", "raw-array", hot_base_min, "arena", hot_os_min, &fails);
