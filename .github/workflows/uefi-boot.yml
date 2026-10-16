@@ -31,12 +31,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
-          # QEMU's efi-virtio.rom ships in qemu-system-common/data (skipped with --no-install-recommends)
-          sudo apt-get install -y --no-install-recommends qemu-system-common qemu-system-data || true
-          rom=$(find /usr -name efi-virtio.rom 2>/dev/null | head -1)
-          echo "found efi-virtio.rom at: ${rom:-NONE}"
-          if [ -n "$rom" ]; then sudo mkdir -p /usr/share/qemu && sudo cp "$rom" /usr/share/qemu/efi-virtio.rom; fi
-          ls -l /usr/share/qemu/efi-virtio.rom
 
       - name: Build kernel (native aarch64)
         run: make -C kernel CROSS_COMPILE=
@@ -58,7 +52,8 @@ jobs:
           timeout 300 qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
-            -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
+            -drive file=dist/zenin-os-uefi.img,format=raw,if=none,id=hd0 \
+            -device qemu-xhci -device usb-storage,drive=hd0 \
             -display none -serial file:uefi_serial.log
           echo "qemu-exit=$?"
 
