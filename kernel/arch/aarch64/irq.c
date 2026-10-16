@@ -84,6 +84,11 @@ bool zenin_irq_init(void) {
     uart_puts("; using GICv");
     uart_put_dec(gic_ver);
     uart_puts("\n");
+    uart_puts("pre-gic gicd_ctlr=");
+    uart_put_hex(GICD_CTLR);
+    uart_puts(" gicc_ctlr=");
+    uart_put_hex(GICC_CTLR);
+    uart_puts("\n");
     if (gic_ver == 3) {
         /* GICv3: system-register CPU interface + GICR redistributor. */
         GICD_CTLR = 0;
