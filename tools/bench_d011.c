@@ -82,18 +82,22 @@ static void cycles_init(void) {
     sigaction(SIGILL, &old_ill, NULL);
     sigaction(SIGSEGV, &old_segv, NULL);
 
-    printf("# cycle counter: %s (perf_event_open fd=%d)\n",
-           use_pmccntr ? "PMCCNTR_EL0 (1-cycle resolution)" : "CNTVCT_EL0 fallback",
-           perf_fd);
+    printf("# cycle counter: %s (perf_event_open fd=%d, direct-mrs %s)\n",
+           perf_fd >= 0 ? "PMCCNTR via perf fd (HW_CPU_CYCLES)" : "CNTVCT_EL0 fallback",
+           perf_fd, use_pmccntr ? "ok" : "trapped");
 }
 
+/* Read the authoritative HW_CPU_CYCLES (PMCCNTR) count through the perf fd
+ * opened above — this is "PMCCNTR via perf_event_open" per the KF005 bar.
+ * Falls back to CNTVCT_EL0 if the perf counter is unavailable. */
 static inline uint64_t read_cycles(void) {
-    uint64_t v;
-    if (use_pmccntr)
-        __asm__ volatile("mrs %0, pmccntr_el0" : "=r"(v));
-    else
-        __asm__ volatile("mrs %0, cntvct_el0" : "=r"(v));
-    return v;
+    if (perf_fd >= 0) {
+        uint64_t v = 0;
+        if (read(perf_fd, &v, sizeof(v)) == (ssize_t)sizeof(v)) return v;
+    }
+    uint64_t c;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(c));
+    return c;
 }
 
 /* ------------------------------------------------------------------ */
