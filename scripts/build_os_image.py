@@ -178,15 +178,29 @@ def build_uefi_stub(cc, ld, objcopy, nm, workdir):
                            obj, "-o", elf])
     out = subprocess.check_output([nm, elf]).decode()
     entry_addr = None
+    max_addr = UEFI_TEXT_RVA
     for line in out.splitlines():
         parts = line.split()
         if len(parts) == 3 and parts[2] == "efi_main":
             entry_addr = int(parts[0], 16)
+        if len(parts) >= 3:
+            try:
+                a = int(parts[0], 16)
+            except ValueError:
+                continue
+            if a > max_addr:
+                max_addr = a
     if entry_addr is None:
         sys.exit("efi_main symbol not found")
     subprocess.check_call([objcopy, "-O", "binary", elf, raw])
     with open(raw, "rb") as f:
         text = f.read()
+    # objcopy -O binary drops trailing NOBITS .bss. Pad the raw image so statics
+    # in .bss (e.g. boot_info_storage) are mapped and writable in the PE image;
+    # otherwise build_boot_info faults writing to unmapped memory past the image.
+    needed = max(len(text), (max_addr - UEFI_TEXT_RVA) + 0x4000)
+    if needed > len(text):
+        text += b"\0" * (needed - len(text))
     return build_pe32_plus(text, entry_addr - UEFI_TEXT_RVA)
 
 
