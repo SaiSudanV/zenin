@@ -373,6 +373,15 @@ void arch_mmu_enable(const zenin_boot_info_t *boot_info) {
     unsigned kidx = (unsigned)(kstart >> 30);
     l1_static[kidx] = ((uint64_t)kernel_l2 & DESC_ADDR_MASK) | DESC_TABLE | DESC_VALID;
 
+    /* Always map the platform device window (0..1 GiB: GIC 0x08000000, UART
+     * 0x09000000, timer) as device memory, regardless of the firmware map. The
+     * firmware memory map lists RAM + explicit MMIO windows but often omits
+     * platform device MMIO, so the GIC write would otherwise fault under UEFI.
+     * Skip when the kernel image itself occupies the low GiB (kernel_l2 owns it). */
+    if (kidx != 0u) {
+        l1_static[0] = ((uint64_t)low_device_l2 & DESC_ADDR_MASK) | DESC_TABLE | DESC_VALID;
+    }
+
     if (zenin_boot_info_valid(boot_info)) {
         const zenin_boot_range_t *ram = zenin_boot_ram(boot_info);
         const zenin_boot_range_t *mmio = zenin_boot_mmio(boot_info);
