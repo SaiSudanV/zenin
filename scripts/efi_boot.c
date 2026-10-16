@@ -143,30 +143,31 @@ static void clean_caches_and_disable_mmu(void) {
         }
     }
     __asm__ volatile("dsb sy\n\tisb\n\tic iallu\n\tdsb sy\n\tisb" : : : "memory");
-
-    u64 sctlr;
-    __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-    sctlr &= ~((u64)1u << 0);  /* M: MMU off */
-    sctlr &= ~((u64)1u << 2);  /* C: data cache off */
-    sctlr &= ~((u64)1u << 12); /* I: instruction cache off */
-    __asm__ volatile("msr sctlr_el1, %0\n\tisb" : : "r"(sctlr) : "memory");
-    __asm__ volatile("tlbi vmalle1\n\tdsb sy\n\tisb" : : : "memory");
 }
 
-static void jump_to_kernel(void *boot_info) {
+static void jump_to_kernel(void *entry, void *boot_info) {
     u64 cpacr;
     __asm__ volatile("mrs %0, cpacr_el1" : "=r"(cpacr));
     cpacr |= (u64)3u << 20; /* FPEN: no FP/NEON trapping */
     __asm__ volatile("msr cpacr_el1, %0\n\tisb" : : "r"(cpacr) : "memory");
     __asm__ volatile("msr daifset, #0xf" : : : "memory");
-    clean_caches_and_disable_mmu();
+    clean_caches_and_disable_mmu(); /* cache flush; MMU disabled in the asm below */
     dbg("ZENIN-EFI: jumping to kernel\n");
-    register u64 entry_reg __asm__("x8") = EFI_LOAD_ADDRESS;
+    register u64 entry_reg __asm__("x8") = (u64)entry;
     register u64 boot_reg __asm__("x0") = (u64)boot_info;
-    __asm__ volatile("mov x1, #0\n\tmov x2, #0\n\tmov x3, #0\n\t"
+    /* Disable the MMU and branch in ONE asm block. After SCTLR_EL1.M=0 the C
+     * return address (LR) is a virtual address that no longer resolves, so we
+     * must never return to C. entry is a physical address. */
+    __asm__ volatile("mrs x9, sctlr_el1\n\t"
+                     "bic x9, x9, #1\n\t"       /* M=0 */
+                     "bic x9, x9, #4\n\t"       /* C=0 */
+                     "bic x9, x9, #(1<<12)\n\t" /* I=0 */
+                     "msr sctlr_el1, x9\n\tisb\n\t"
+                     "tlbi vmalle1\n\tdsb sy\n\tisb\n\t"
+                     "mov x1, #0\n\tmov x2, #0\n\tmov x3, #0\n\t"
                      "mov x4, #0\n\tmov x5, #0\n\tmov x6, #0\n\tmov x7, #0\n\t"
                      "br %1" : : "r"(boot_reg), "r"(entry_reg)
-                     : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "memory");
+                     : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x9", "memory");
 }
 
 /* EFI memory descriptor (UEFI spec) — used to walk GetMemoryMap output. */
@@ -303,6 +304,6 @@ efi_status efi_main(efi_handle image, efi_system_table *st) {
      * PMM against real RAM instead of a hardcoded QEMU layout (Goal 1.6). */
     void *boot_info = build_boot_info(map, actual_map_size, desc_size,
                                       EFI_LOAD_ADDRESS, EFI_LOAD_ADDRESS + image_size);
-    jump_to_kernel(boot_info);
+    jump_to_kernel((void *)EFI_LOAD_ADDRESS, boot_info);
     return EFI_SUCCESS;
 }
