@@ -31,6 +31,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
+          # The runner's QEMU defaults every PCI device to efi-virtio.rom but the ROM
+          # is absent and not packaged. Create a no-op PCI option ROM (0x55AA sig +
+          # retf). AAVMF uses its own VirtioBlkDxe, so the ROM is never executed.
+          sudo mkdir -p /usr/share/qemu
+          printf '\x55\xaa\x01\xcb' | sudo dd of=/usr/share/qemu/efi-virtio.rom bs=512 count=1 conv=sync 2>/dev/null
+          ls -l /usr/share/qemu/efi-virtio.rom
 
       - name: Build kernel (native aarch64)
         run: make -C kernel CROSS_COMPILE=
@@ -52,8 +58,7 @@ jobs:
           timeout 300 qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
-            -drive file=dist/zenin-os-uefi.img,format=raw,if=none,id=hd0 \
-            -device qemu-xhci -device usb-storage,drive=hd0 \
+            -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
             -display none -serial file:uefi_serial.log
           echo "qemu-exit=$?"
 
