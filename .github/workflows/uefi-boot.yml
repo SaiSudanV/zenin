@@ -31,9 +31,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
-          # QEMU EFI virtio option ROM (efi-virtio.rom); package name varies by release
-          sudo apt-get install -y --no-install-recommends ipxe-qemu \
-            || sudo apt-get install -y --no-install-recommends qemu-system-data
+          # QEMU's efi-virtio.rom ships in qemu-system-common/data (skipped with --no-install-recommends)
+          sudo apt-get install -y --no-install-recommends qemu-system-common qemu-system-data || true
+          rom=$(find /usr -name efi-virtio.rom 2>/dev/null | head -1)
+          echo "found efi-virtio.rom at: ${rom:-NONE}"
+          if [ -n "$rom" ]; then sudo mkdir -p /usr/share/qemu && sudo cp "$rom" /usr/share/qemu/efi-virtio.rom; fi
           ls -l /usr/share/qemu/efi-virtio.rom
 
       - name: Build kernel (native aarch64)
