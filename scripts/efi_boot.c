@@ -146,6 +146,7 @@ static void clean_caches_and_disable_mmu(void) {
 }
 
 static void jump_to_kernel(void *entry, void *boot_info) {
+    dbg("ZENIN-EFI: jump_to_kernel enter\n");
     u64 cpacr;
     __asm__ volatile("mrs %0, cpacr_el1" : "=r"(cpacr));
     cpacr |= (u64)3u << 20; /* FPEN: no FP/NEON trapping */
@@ -193,6 +194,7 @@ static u8 boot_info_storage[sizeof(zenin_boot_info_t) +
  * identity map must map as device memory. */
 static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
                              u64 kernel_start, u64 kernel_end) {
+    dbg("ZENIN-EFI: build_boot_info\n");
     zenin_boot_info_t *bi = (zenin_boot_info_t *)boot_info_storage;
     zenin_boot_range_t *regions = (zenin_boot_range_t *)(bi + 1);
     zenin_boot_range_t *mmio = regions + ZENIN_BOOT_INFO_MAX_REGIONS;
@@ -299,6 +301,7 @@ efi_status efi_main(efi_handle image, efi_system_table *st) {
         if (s == EFI_SUCCESS) break;
     }
     if (s != EFI_SUCCESS) { dbg("ZENIN-EFI: exit-boot-services err "); dbg_hex(s); return s; }
+    dbg("ZENIN-EFI: boot services exited\n");
 
     /* Stream C: hand the discovered memory map to the kernel so it sizes the
      * PMM against real RAM instead of a hardcoded QEMU layout (Goal 1.6). */
