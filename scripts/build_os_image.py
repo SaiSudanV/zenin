@@ -301,7 +301,7 @@ def build_uefi_disk(boot_efi, kernel_flat, out_img):
         f.write(open(boot_efi, "rb").read())
     with open(os.path.join(workdir, "OS.IMG.src"), "wb") as f:
         f.write(open(kernel_flat, "rb").read())
-    subprocess.check_call(["wsl", "-d", "kali-linux", "--", "bash", "-c", cmd])
+    subprocess.check_call(shell + [cmd])
     os.replace(os.path.join(workdir, "uefi_disk.img"), out_img)
     scrub_fat_timestamps(out_img)
     os.remove(os.path.join(workdir, "BOOTAA64.EFI.src"))
