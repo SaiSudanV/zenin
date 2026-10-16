@@ -5,11 +5,20 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-/* PL011 PrimeCell UART Base Address (QEMU virt ARM64) */
+/* PL011 PrimeCell / SBSA generic UART. Both expose the same register block
+ * (data @0x00, flag @0x18, TXFF bit5 / RXFE bit4), so a single driver serves
+ * QEMU virt's PL011 (base 0x09000000) and real-silicon SBSA UARTs (Ampere /
+ * Graviton) alike. Only the base address differs, so it is runtime-configurable
+ * (Stream C): the boot path may call uart_set_base() with the discovered base
+ * before use; it defaults to the QEMU virt PL011 base. */
 #define UART0_BASE 0x09000000
 
-#define UART_DR    (*(volatile uint32_t *)(UART0_BASE + 0x00))
-#define UART_FR    (*(volatile uint32_t *)(UART0_BASE + 0x18))
+extern volatile uint64_t zenin_uart_base;
+
+static inline void uart_set_base(uint64_t base) { zenin_uart_base = base; }
+
+#define UART_DR    (*(volatile uint32_t *)(zenin_uart_base + 0x00))
+#define UART_FR    (*(volatile uint32_t *)(zenin_uart_base + 0x18))
 #define UART_FR_TXFF (1 << 5) /* Transmit FIFO full */
 #define UART_FR_RXFE (1 << 4) /* Receive FIFO empty */
 

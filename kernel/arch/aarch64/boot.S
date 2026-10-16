@@ -7,6 +7,11 @@
 .global _start
 
 _start:
+    /* 0. Preserve the EFI->kernel boot-info pointer (x0) across setup; the
+     *    UEFI stub passes the discovered memory map here (Stream C). x19 is
+     *    callee-saved so arch_mmu_enable preserves it. */
+    mov     x19, x0
+
     /* 1. Only allow Core 0 to initialize the kernel. Park secondary cores for now. */
     mrs     x0, mpidr_el1
     and     x0, x0, #0xFF       // Extract Core ID (affinity 0)
@@ -28,17 +33,12 @@ master_core:
     ldr     x0, =__stack_top
     mov     sp, x0
 
-    /* 3. Zero out the BSS section */
-    ldr     x1, =__bss_start
-    ldr     x2, =__bss_end
-zero_bss:
-    cmp     x1, x2
-    b.hs    call_kernel
-    str     xzr, [x1], #8
-    b       zero_bss
-
-call_kernel:
-    /* 4. Jump to C Kernel Main */
+    /* 3. Initialized state is pre-baked in the image (D011 A6):
+     *    -fno-zero-initialized-in-bss leaves no runtime .bss zeroing. */
+    /* Enter the current AArch64 identity-mapped RAM/MMIO regime. */
+    bl      arch_mmu_enable
+    /* 4. Jump to C Kernel Main (x0 = boot-info pointer from the UEFI stub) */
+    mov     x0, x19
     bl      kmain
 
 halt:

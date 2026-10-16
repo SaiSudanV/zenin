@@ -1,7 +1,12 @@
 /*
- * Project Zenin - Kernel Main (kmain)
- * Demonstrating Bare-Metal Boot, PMM, Heap, Z-Bus, Framebuffer, AI Engine,
- * Multi-OS Subsystem, and Layer 4 Interactive Touch Compositor & GUI.
+ * Project Zenin - Microkernel Main (kmain)
+ *
+ * Strict Reality-Bound Engineering Compliance:
+ * - ZERO game-specific code, headers, or static game payloads.
+ * - Pure microkernel architecture: PMM, KHeap, Z-Bus, Framebuffer, Input Digitizer,
+ *   Multi-OS Containers (Android, Windows, Linux, macOS).
+ * - Pure raw input stream passthrough (Mouse, Keyboard, Gamepad, Touch).
+ * - Zero hardcoded action triggers or fake interactive mocks.
  */
 
 #include "../include/uart.h"
@@ -22,8 +27,21 @@
 #include "../include/unified_bridge.h"
 #include "../include/production_test.h"
 #include "../include/container_loader.h"
+#include "../include/pe_loader.h"
+#include "../include/hal_cpu.h"
+#include "../include/irq.h"
+#include "../include/boot_info.h"
+#include "../include/arch/aarch64/mmu.h"
 
 extern char __kernel_end;
+extern char __kernel_start;
+
+/* Shared UART base (see include/uart.h) — PL011/SBSA register-compatible. */
+volatile uint64_t zenin_uart_base = UART0_BASE;
+extern char __bss_start;
+extern char __bss_end;
+extern char __stack_bottom;
+extern char __stack_top;
 
 void *memset(void *s, int c, size_t n) {
     uint8_t *p = (uint8_t *)s;
@@ -38,361 +56,237 @@ void *memcpy(void *dest, const void *src, size_t n) {
     return dest;
 }
 
-void kmain(void) {
+static uint8_t hex_to_nibble(char c) {
+    if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
+    if (c >= 'A' && c <= 'F') return (uint8_t)(c - 'A' + 10);
+    if (c >= 'a' && c <= 'f') return (uint8_t)(c - 'a' + 10);
+    return 0;
+}
+
+void kmain(uint64_t boot_info) {
     uart_puts("\n=====================================================\n");
     uart_puts("   PROJECT ZENIN: BARE-METAL GROUND-UP KERNEL        \n");
-    uart_puts("   Status: CPU Booted into Exception Level (AArch64) \n");
-    uart_puts("   Performance: Zero Lag | Peak Battery | 0.0% Idle  \n");
-    uart_puts("   Target Idle RAM: < 200 MB | Zero Frame Drops      \n");
+    uart_puts("   Architecture: AArch64 Bare-Metal Microkernel      \n");
+    uart_puts("   Test target: QEMU virt | Cortex-A53 | 2 GiB RAM\n");
+    uart_puts("   Resource targets are measured separately; no CPU/power result yet.\n");
+    uart_puts(arch_mmu_identity_map_installed()
+                  ? "[zenin-mmu] Zenin AArch64 stage-1 identity map and caches enabled.\n"
+                  : "[zenin-mmu] Zenin identity map not installed (translation was already enabled or setup skipped).\n");
     uart_puts("=====================================================\n\n");
 
-    /* 1. Initialize PMM */
-    uintptr_t free_mem_start = (uintptr_t)&__kernel_end;
-    size_t test_ram_size = 512 * 1024 * 1024;
-    pmm_init(free_mem_start, test_ram_size);
-
-    /* 2. Initialize Dynamic Kernel Heap */
-    kheap_init();
-
-    /* 3. Initialize Z-Bus Zero-Copy Event Mesh */
-    zbus_init();
-
-    /* 4. Initialize Universal Direct Framebuffer (720x1280 Extreme Low-RAM RGB565 Mode) */
-    uart_puts("[zenin-display] Initializing Direct Framebuffer (720x1280 @ 16-bit RGB565, ~1.84 MB VRAM)...\n");
-    void *vram_buffer = kmalloc(720 * 1280 * sizeof(uint16_t));
-    if (vram_buffer) {
-        fb_init_format(720, 1280, vram_buffer, FB_FORMAT_RGB565);
-    }
-
-    /* 5. Initialize Layer 4 Interactive Touch Digitizer */
-    uart_puts("[zenin-input] Initializing Hardware Touch Digitizer...\n");
-    input_init(720, 1280);
-
-    /* 6. Initialize Micro-Compositor & Render First Desktop Frame */
-    uart_puts("[zenin-compositor] Initializing Micro-Compositor & Rendering Shell UI...\n");
-    compositor_init(720, 1280);
-    compositor_render_frame();
-    uart_puts("[zenin-compositor] Shell UI Render Complete (Status Bar, Buttons, Load Gauge)!\n");
-
-    /* 7. Simulate Live Interactive Touch Tap on 'TURBO GAME' Button */
-    uart_puts("\n[zenin-input] Simulating Touch Event (Finger Down at X:120, Y:240)...\n");
-    input_handle_hardware_touch(120, 240, TOUCH_EVENT_DOWN);
-
-    /* Poll touch event over Z-Bus */
-    zbus_message_t msg;
-    if (zbus_poll(&msg) && msg.type == ZBUS_MSG_TOUCH_EVT) {
-        uint32_t *tdata = (uint32_t *)msg.payload;
-        compositor_handle_touch(tdata[0], tdata[1], (zenin_touch_type_t)tdata[2]);
-    }
-
-    /* Release finger */
-    uart_puts("[zenin-input] Simulating Touch Event (Finger Up at X:120, Y:240)...\n");
-    input_handle_hardware_touch(120, 240, TOUCH_EVENT_UP);
-    if (zbus_poll(&msg) && msg.type == ZBUS_MSG_TOUCH_EVT) {
-        uint32_t *tdata = (uint32_t *)msg.payload;
-        compositor_handle_touch(tdata[0], tdata[1], (zenin_touch_type_t)tdata[2]);
-    }
-
-    /* Test 0 ns Direct Zero-Copy Pointer Handoff */
-    const char *test_render_packet = "3D_GAME_FRAME_BUFFER_DIRECT_REF";
-    zbus_publish_ptr(0x10, 0x20, (void *)test_render_packet);
-    if (zbus_poll(&msg) && msg.type == ZBUS_MSG_PTR_HANDOFF) {
-        uintptr_t recv_addr = 0;
-        for (size_t i = 0; i < sizeof(uintptr_t); i++) {
-            recv_addr |= ((uintptr_t)msg.payload[i]) << (i * 8);
+    /* 1. Initialize Physical Memory Manager.
+     * Stream C: size the PMM from the firmware memory map the UEFI stub passed
+     * in x0 (boot_info) when present; fall back to the QEMU virt layout. */
+    const zenin_boot_info_t *bi = (const zenin_boot_info_t *)boot_info;
+    uintptr_t ram_base, ram_end;
+    bool have_map = boot_info && bi->magic == ZENIN_BOOT_INFO_MAGIC && bi->ram_count > 0;
+    if (have_map) {
+        const zenin_ram_region_t *regions = (const zenin_ram_region_t *)(bi + 1);
+        uintptr_t k_end = (uintptr_t)&__kernel_end;
+        ram_base = 0; ram_end = 0;
+        for (uint64_t i = 0; i < bi->ram_count; i++) {
+            uintptr_t b = (uintptr_t)regions[i].base;
+            uintptr_t e = b + (uintptr_t)regions[i].pages * 4096u;
+            if (k_end > b && k_end <= e) { ram_base = b; ram_end = e; break; }
         }
-        const char *shared_data = (const char *)recv_addr;
-        uart_puts("[zenin-zbus] 0 ns Direct Pointer Handoff Verified! Shared Buffer: ");
-        uart_puts(shared_data);
-        uart_puts(" (0 memory copies, 0 context switches)\n");
+        if (ram_end == 0) {
+            for (uint64_t i = 0; i < bi->ram_count; i++) {
+                uintptr_t b = (uintptr_t)regions[i].base;
+                uintptr_t e = b + (uintptr_t)regions[i].pages * 4096u;
+                if (e - b > ram_end - ram_base) { ram_base = b; ram_end = e; }
+            }
+        }
+        uart_puts("[zenin-boot] PMM sized from the firmware memory map.\n");
+    } else {
+        ram_base = 0x40000000ULL;
+        ram_end = ram_base + 2048ULL * 1024 * 1024;
+        uart_puts("[zenin-boot] No valid boot-info; using QEMU virt RAM fallback.\n");
     }
+    uintptr_t mem_start = (uintptr_t)&__kernel_end;
+    if (mem_start < ram_base || mem_start >= ram_end) {
+        uart_puts("[zenin-pmm] Unsupported or invalid RAM layout. Halting.\n");
+        for (;;) __asm__ volatile("wfi");
+    }
+    pmm_init(mem_start, ram_end - mem_start);
+    bool irq_ready = zenin_irq_init();
+    uart_puts(irq_ready ? "[zenin-irq] QEMU GICv2 registers programmed; timer wake not yet verified.\n"
+                        : "[zenin-irq] Timer IRQ configuration unavailable.\n");
 
-    /* 8. Layer 5: Initialize On-Device INT4 Neural Core & Userland Shell */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 5: USERLAND SHELL & INT4 NEURAL REASONING   \n");
-    uart_puts("=====================================================\n");
+    /* 2. Initialize Framebuffer Driver (360x640 RGB565 1:1) */
+    uint32_t fb_width = 360;
+    uint32_t fb_height = 640;
+    size_t fb_bytes = fb_width * fb_height * sizeof(uint16_t);
+    size_t fb_pages = (fb_bytes + 4095) / 4096;
+    size_t free_pages_before_fb = pmm_get_free_pages();
+    void *fb_mem = pmm_alloc_pages(fb_pages);
+    size_t free_pages_after_fb = pmm_get_free_pages();
+    uart_puts("[zenin-memory] Framebuffer request: ");
+    uart_put_dec(fb_bytes);
+    uart_puts(" bytes / ");
+    uart_put_dec(fb_pages);
+    uart_puts(" pages; PMM accounted ");
+    uart_put_dec(free_pages_before_fb - free_pages_after_fb);
+    uart_puts(" pages\n");
+    fb_init(fb_width, fb_height, fb_mem);
+
+    /* 3. Kernel heap storage is acquired lazily on the first kmalloc call. */
+
+    /* 4. Layer 4: Micro-Compositor & Multi-Container Surface Manager */
+    compositor_init(fb_width, fb_height);
+
+    /* 5. Layer 5: Ultra-Low Latency Input Digitizer */
+    input_init(fb_width, fb_height);
+
+    /* 6. Layer 6: Neural Core & Battery Power Governor */
     neural_core_init();
+
+    /* 7. Layer 7: Interactive Shell Subsystem */
     shell_init();
 
-    /* Test Shell Command: System status */
-    shell_execute_command("status");
-
-    /* Test Shell Command: Natural language AI turbo boost trigger */
-    shell_execute_command("boost game performance to 60fps");
-
-    /* Test Shell Command: Natural language app launch */
-    shell_execute_command("launch android and windows apps");
-
-    uart_puts("\n[zenin-core] Layer 5 Userland Shell & Neural Engine Verified!\n");
-
-    /* 9. Layer 6: Universal Multi-OS Subsystems & ABI Shims (Linux, Android, Windows, macOS) */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 6: MULTI-OS RUNTIMES & UNIVERSAL ABI SHIMS  \n");
-    uart_puts("=====================================================\n");
-    compat_launcher_init();
+    /* 8. Layer 8: Multi-OS ABI Dispatch Engine */
     abi_shim_init();
 
-    /* Test 1: Native Linux ELF Execution (sys_write & sys_mmap) */
-    uart_puts("\n[test-os] 1. Launching Native Linux (Minecraft/ELF)...\n");
-    zenin_app_process_t linux_proc;
-    compat_launch_app("minecraft_server.elf", &linux_proc);
-    zenin_syscall_result_t r_lin = abi_dispatch_linux(64, 1, (uintptr_t)"   [linux-app] Hello from Linux ELF userland!\n", 45);
-    (void)r_lin;
-    compat_terminate_app(&linux_proc);
-
-    /* Test 2: Android APK Execution (SurfaceFlinger & Binder) */
-    uart_puts("\n[test-os] 2. Launching Android App (SubwaySurfers.apk)...\n");
-    zenin_app_process_t android_proc;
-    compat_launch_app("SubwaySurfers.apk", &android_proc);
-    zenin_syscall_result_t r_and = abi_dispatch_android(0x01, 0, 0);
-    uart_puts("   [android-shim] ");
-    uart_puts(r_and.action_log);
-    uart_puts("\n");
-    compat_terminate_app(&android_proc);
-
-    /* Test 3: Windows PE Execution (Win32 NT & DXVK Blit) */
-    uart_puts("\n[test-os] 3. Launching Windows Executable (Office365.exe)...\n");
-    zenin_app_process_t win_proc;
-    compat_launch_app("Office365.exe", &win_proc);
-    zenin_syscall_result_t r_win = abi_dispatch_win32(0x54, 0, 0);
-    uart_puts("   [win32-shim] ");
-    uart_puts(r_win.action_log);
-    uart_puts("\n");
-    compat_terminate_app(&win_proc);
-
-    /* Test 4: macOS Mach-O Execution (GarageBand.app - Mach Trap & Quartz) */
-    uart_puts("\n[test-os] 4. Launching macOS Application (GarageBand.app)...\n");
-    zenin_app_process_t mac_proc;
-    compat_launch_app("GarageBand.app", &mac_proc);
-    zenin_syscall_result_t r_mac_trap = abi_dispatch_macos(-26, 0x100, 0);
-    uart_puts("   [macos-mach-trap] ");
-    uart_puts(r_mac_trap.action_log);
-    uart_puts("\n");
-    zenin_syscall_result_t r_mac_gfx = abi_dispatch_macos(0x100, 0, 0);
-    uart_puts("   [macos-metal-surface] ");
-    uart_puts(r_mac_gfx.action_log);
-    uart_puts("\n");
-    compat_terminate_app(&mac_proc);
-
-    uart_puts("\n[zenin-core] Layer 6 Multi-OS Universal Compatibility Verified!\n");
-    uart_puts("[zenin-core] 100% of memory reclaimed back to 0-byte leak state.\n");
-
-    /* 10. Layer 8: Universal 3D Graphics Rasterizer (Z-GL) Benchmark Test */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 8: UNIVERSAL 3D GRAPHICS RASTERIZER (Z-GL)  \n");
-    uart_puts("=====================================================\n");
-    zgl_init(720, 1280);
-
-    /* Render a real 3D depth-tested triangle mesh (Simulating 3D Game / Subway Surfers) */
-    uart_puts("[test-3d] Rasterizing 3D Perspective Depth-Tested Mesh...\n");
-    zgl_clear(0x0000); /* Dark background */
-
-    zgl_triangle_t game_mesh[2] = {
-        {
-            .v0 = { 100, 100, 500, 0x073F }, /* Cyan */
-            .v1 = { 180, 100, 500, 0xF800 }, /* Red */
-            .v2 = { 140, 180, 200, 0x07E0 }  /* Green */
-        },
-        {
-            .v0 = { 140, 80, 800, 0xFFE0 }, /* Yellow */
-            .v1 = { 90, 140, 900, 0x001F }, /* Blue */
-            .v2 = { 190, 140, 900, 0xF81F }  /* Magenta */
-        }
-    };
-
-    zgl_dispatch_draw_elements(2, game_mesh);
-
-    uint32_t fps = 0, polys = 0;
-    size_t vram_kb = 0;
-    zgl_get_metrics(&fps, &polys, &vram_kb);
-
-    uart_puts("[test-3d] 3D Mesh Render Complete!\n");
-    uart_puts("          FPS Target: 60 FPS | Polygons Rendered: 2\n");
-    uart_puts("          Hardware Depth Buffer & VRAM: ~3.68 MB Total\n");
-    uart_puts("          Simulated CPU Load: ~8.4% (Zero Overheating, Peak Battery)\n");
-
-    uart_puts("\n[zenin-core] Layer 8 3D Graphics Engine Verified!\n");
-
-    /* 11. Layer 9: Universal Multi-OS Package & Installer Engine (Z-Pkg) */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 9: MULTI-OS PACKAGE & INSTALLER ENGINE      \n");
-    uart_puts("=====================================================\n");
+    /* 9. Layer 9: Zero-Copy Package Container */
     zpkg_init();
 
-    /* Test 1: Real Android APK Package Unpack & Execution (Subway Surfers) */
-    uart_puts("\n[test-pkg] 1. Ingesting Android Package: SubwaySurfers_v3.2.apk\n");
-    const uint8_t apk_magic[4] = { 0x50, 0x4B, 0x03, 0x04 }; /* ZIP/APK header */
-    zenin_package_manifest_t apk_manifest;
-    if (zpkg_unpack_and_mount("SubwaySurfers_v3.2.apk", apk_magic, sizeof(apk_magic), &apk_manifest)) {
-        zpkg_execute_manifest(&apk_manifest);
-    }
-
-    /* Test 2: Real Windows PE Executable Unpack & Execution (Game.exe) */
-    uart_puts("\n[test-pkg] 2. Ingesting Windows PE Package: Cyberpunk2D.exe\n");
-    const uint8_t exe_magic[4] = { 0x4D, 0x5A, 0x90, 0x00 }; /* MZ header */
-    zenin_package_manifest_t exe_manifest;
-    if (zpkg_unpack_and_mount("Cyberpunk2D.exe", exe_magic, sizeof(exe_magic), &exe_manifest)) {
-        zpkg_execute_manifest(&exe_manifest);
-    }
-
-    /* Test 3: Real macOS / iOS Mach-O App Bundle (GarageBand.app) */
-    uart_puts("\n[test-pkg] 3. Ingesting macOS Bundle: GarageBand.app\n");
-    const uint8_t macho_magic[4] = { 0xCF, 0xFA, 0xED, 0xFE }; /* Mach-O 64 header */
-    zenin_package_manifest_t mac_manifest;
-    if (zpkg_unpack_and_mount("GarageBand.app", macho_magic, sizeof(macho_magic), &mac_manifest)) {
-        zpkg_execute_manifest(&mac_manifest);
-    }
-
-    /* Test 4: Real Linux Package (MinecraftBedrock.deb / ELF) */
-    uart_puts("\n[test-pkg] 4. Ingesting Linux Package: MinecraftBedrock.elf\n");
-    const uint8_t elf_magic[4] = { 0x7F, 'E', 'L', 'F' }; /* ELF header */
-    zenin_package_manifest_t elf_manifest;
-    if (zpkg_unpack_and_mount("MinecraftBedrock.elf", elf_magic, sizeof(elf_magic), &elf_manifest)) {
-        zpkg_execute_manifest(&elf_manifest);
-    }
-
-    /* 12. Layer 10: Dynamic Symbol Linker (z-ld.so) & Universal C Runtime */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 10: DYNAMIC SYMBOL LINKER (z-ld.so) & CRT   \n");
-    uart_puts("=====================================================\n");
+    /* 10. Layer 10: Dynamic Symbol Linker (z-ld.so) & CRT Bridge */
     zld_init();
 
-    /* Test 1: Android libmain.so dynamic dependency linking */
-    const char *android_deps[3] = { "malloc", "__android_log_print", "free" };
-    zld_link_dependencies("libmain.so (Subway Surfers)", android_deps, 3, ZLD_ABI_BIONIC);
-
-    /* Test 2: Windows Cyberpunk2D.exe PE dynamic import linking */
-    const char *win_deps[3] = { "GetTickCount", "OutputDebugStringA", "memcpy" };
-    zld_link_dependencies("Cyberpunk2D.exe", win_deps, 3, ZLD_ABI_MSVCRT);
-
-    /* Test 3: Linux / macOS dynamic symbol linkage */
-    const char *mac_deps[2] = { "NSLog", "memset" };
-    zld_link_dependencies("GarageBand.dylib", mac_deps, 2, ZLD_ABI_LIBSYSTEM);
-
-    uint32_t reg_syms = 0, res_cnt = 0;
-    size_t mem_used = 0;
-    zld_get_metrics(&reg_syms, &res_cnt, &mem_used);
-    uart_puts("\n[zenin-core] Layer 10 Dynamic Linker Verified!\n");
-    uart_puts("             Resolved 8 Dynamic Production Symbols in < 15 microseconds.\n");
-    uart_puts("             Linker Metadata Overhead: < 4 KB RAM.\n");
-
-    /* 13. Layer 11: Real-World Graphics & Audio Bridge */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   LAYER 11: REAL-WORLD GRAPHICS & AUDIO BRIDGE      \n");
-    uart_puts("=====================================================\n");
+    /* 11. Prototype software graphics/audio API bridge */
     unified_bridge_init();
 
-    /* Test 1: Android OpenGL ES draw dispatch through symbol bridge */
-    uart_puts("\n[bridge-test] 1. Android Subway Surfers -> GLES glDrawElements call\n");
-    zgl_triangle_t gles_quad[1] = {
-        {
-            .v0 = { 50, 50, 100, 0xF800 },
-            .v1 = { 100, 50, 100, 0x07E0 },
-            .v2 = { 75, 100, 100, 0x001F }
-        }
-    };
-    zenin_gles_draw_elements(1, gles_quad);
-    zenin_egl_swap_buffers();
-
-    /* Test 2: Android OpenSL ES zero-copy audio stream handoff */
-    uart_puts("[bridge-test] 2. Android Subway Surfers -> OpenSL Audio Frame (44.1 kHz)\n");
-    uint8_t pcm_sample[16] = { 0x01, 0x02, 0x03, 0x04 };
-    zenin_audio_stream_t audio_stream = {
-        .sample_rate = 44100,
-        .channels = 2,
-        .bits_per_sample = 16,
-        .pcm_data = pcm_sample,
-        .data_len = sizeof(pcm_sample)
-    };
-    zenin_opensl_enqueue_audio(&audio_stream);
-
-    /* Test 3: Windows Direct3D Draw & XAudio2 sound buffer submit */
-    uart_puts("[bridge-test] 3. Windows Cyberpunk2D -> Direct3D DrawIndexed & XAudio2 Submit\n");
-    zenin_d3d_draw_indexed(1, gles_quad);
-    zenin_xaudio2_submit_buffer(&audio_stream);
-
-    /* Test 4: Apple Metal API primitive draw & CoreAudio callback */
-    uart_puts("[bridge-test] 4. macOS GarageBand -> Apple Metal DrawPrimitives & CoreAudio\n");
-    zenin_metal_draw_primitives(1, gles_quad);
-    zenin_coreaudio_render_callback(&audio_stream);
-
-    uint32_t draws = 0, audio_frames = 0;
-    unified_bridge_get_metrics(&draws, &audio_frames);
-    uart_puts("\n[zenin-core] Layer 11 Unified Graphics & Audio Bridge Verified!\n");
-    uart_puts("             Dispatched 3 Multi-OS 3D Draw Calls & 3 Hardware Audio Streams.\n");
-    uart_puts("             Hardware Translation Latency: 0 ns | Buffer Overhead: < 8 KB RAM.\n");
-
-    /* 14. Layer 12: Production Ingestion & End-to-End Game Testing */
+    /* 12. Microkernel Subsystem Integrity Tests (Zero Mock Code) */
+    /* D012: freeze the kernel-image/.rodata/arena/vector mapping subtree
+     * (Read-Only tables + W^X) before any test or application runs. The
+     * heap subtree stays dynamically mappable but is XNTable-locked. */
+    arch_mmu_freeze_kernel_map();
+    uart_puts("[zenin-mmu] Kernel map frozen: static tables RO, heap subtree XNTable-locked.\n");
     production_test_init();
-    production_run_all_games();
+    if (!production_run_smoke_tests()) {
+        uart_puts("[zenin-test] One or more kernel smoke checks failed.\n");
+    }
 
-    /* 15. Universal Real Binary Container Loaders */
-    uart_puts("\n=====================================================\n");
-    uart_puts("   UNIVERSAL REAL BINARY CONTAINER LOADERS           \n");
-    uart_puts("=====================================================\n");
+    /* 13. Format parser prototypes; these do not execute application binaries. */
     container_subsystem_init();
-    container_run_all_tests();
+    /* Do not execute the legacy synthetic-header examples as if they were
+     * real OS application compatibility tests. */
+    pe_subsystem_init();
+
+    /* Report only accounting directly derived from loaded image bounds and
+     * PMM allocation counters. This is not whole-machine power/CPU telemetry. */
+    size_t free_pg = pmm_get_free_pages();
+    size_t total_pg = pmm_get_total_pages();
+    size_t used_pg = total_pg - free_pg;
+    size_t allocator_bytes = used_pg * PAGE_SIZE;
+    size_t kernel_image_bytes = (uintptr_t)&__kernel_end - (uintptr_t)&__kernel_start;
+    size_t image_rw_bytes = (uintptr_t)&__bss_start - (uintptr_t)&__kernel_start;
+    size_t bss_bytes = (uintptr_t)&__bss_end - (uintptr_t)&__bss_start;
+    size_t stack_bytes = (uintptr_t)&__kernel_end - (uintptr_t)&__stack_bottom;
+    size_t accounted_bytes = allocator_bytes + kernel_image_bytes;
+    size_t platform_reserved_bytes = (uintptr_t)&__kernel_start - ram_base;
 
     uart_puts("\n=====================================================\n");
-    uart_puts("   PROJECT ZENIN: ALL 12 LAYERS + 4 CONTAINERS READY \n");
+    uart_puts("   PROJECT ZENIN: KERNEL PROTOTYPE RUNNING          \n");
     uart_puts("=====================================================\n");
-    uart_puts("[zenin-core] Pure Core OS Idle Footprint: < 3.8 MB RAM (Target: < 5 MB)\n");
-    uart_puts("[zenin-core] Peak 3D Multi-OS Gaming Load: < 50 MB RAM (Budget: 1,000 MB)\n");
-    uart_puts("[zenin-core] Inter-Process Communication: 0 ns Direct Shared Pointer Handoff\n");
-    uart_puts("[zenin-core] Idle CPU Utilization:        0.0% Gated WFI Hardware Sleep\n");
-    uart_puts("[zenin-core] Active 60 FPS Gaming CPU:    ~12% (Strict Target: < 30%)\n");
-    /* 16. Enter Live Interactive Graphical OS Session */
+    uart_puts("[zenin-memory] Kernel image code+rodata+data: ");
+    uart_put_dec(image_rw_bytes / 1024);
+    uart_puts(" KiB; BSS: ");
+    uart_put_dec(bss_bytes / 1024);
+    uart_puts(" KiB; boot stack: ");
+    uart_put_dec(stack_bytes / 1024);
+    uart_puts(" KiB\n[zenin-memory] PMM-accounted resident pages: ");
+    uart_put_dec(used_pg);
+    uart_puts(" pages / ");
+    uart_put_dec(allocator_bytes / 1024);
+    uart_puts(" KiB\n[zenin-memory] OS-owned resident total (image+BSS+stack+PMM pages; shared allocations counted once): ");
+    uart_put_dec(accounted_bytes / 1024);
+    uart_puts(" KiB\n[zenin-memory] Platform-reserved (reported separately, not OS-owned): ");
+    uart_put_dec(platform_reserved_bytes / 1024);
+    uart_puts(" KiB below kernel load address; device MMIO regions are outside the RAM window\n");
+    if (accounted_bytes < (5u * 1024u * 1024u)) {
+        uart_puts("[zenin-memory] QEMU OS-accounted idle-RAM budget: PASS (<5 MiB); actual-device measurement requires target hardware\n");
+    } else {
+        uart_puts("[zenin-memory] QEMU OS-accounted idle-RAM budget: FAIL (>=5 MiB)\n");
+    }
+    uart_puts("[zenin-status] CPU utilization, power, IPC latency, and FPS: not measured\n");
+
+    /* 14. Live Multi-Device Interactive Graphical OS Session */
     uart_puts("\n=====================================================\n");
     uart_puts("   PROJECT ZENIN: LIVE GRAPHICAL INTERACTIVE SESSION \n");
     uart_puts("=====================================================\n");
-    uart_puts("[zenin-shell] Live Display Scanout Active (720x1280 RGB565)\n");
-    uart_puts("[zenin-shell] Direct Hardware Input Digitizer Ready:\n");
-    uart_puts("              Type '1' -> Android Subway Surfers (APK)\n");
-    uart_puts("              Type '2' -> Windows Cyberpunk 2D (PE32+)\n");
-    uart_puts("              Type '3' -> Linux Minecraft Bedrock (ELF64)\n");
-    uart_puts("              Type '4' -> macOS GarageBand (Mach-O 64)\n");
-    uart_puts("              Type ' ' (Space) -> Action / Jump / Mine / Fire\n");
-    uart_puts("              Type 'q' -> Exit Session\n");
+    uart_puts("[zenin-shell] RGB565 software framebuffer active; QEMU test dumps over UART\n");
+    uart_puts("[zenin-shell] UART controls: keys [1]-[4] select parser-demo surfaces\n");
+    uart_puts("[zenin-shell] No native-device input driver or app runtime is active\n");
 
     compositor_render_frame();
     fb_dump_frame();
 
+    if (irq_ready && zenin_irq_test_wfi()) {
+        uart_puts("[zenin-irq] PASS: one timer IRQ woke the core from WFI.\n");
+    } else {
+        uart_puts("[zenin-irq] FAIL: timer wake from WFI was not verified.\n");
+    }
+
     while (1) {
         if (uart_has_char()) {
             char key = uart_getc();
-            if (key == '1') {
-                compositor_switch_app(APP_ANDROID_SUBWAY);
-                uart_puts("[input-event] Switched container -> 1. Android Subway Surfers\n");
-                fb_dump_frame();
-            } else if (key == '2') {
-                compositor_switch_app(APP_WINDOWS_CYBERPUNK);
-                uart_puts("[input-event] Switched container -> 2. Windows Cyberpunk 2D\n");
-                fb_dump_frame();
-            } else if (key == '3') {
-                compositor_switch_app(APP_LINUX_MINECRAFT);
-                uart_puts("[input-event] Switched container -> 3. Linux Minecraft Bedrock\n");
-                fb_dump_frame();
-            } else if (key == '4') {
-                compositor_switch_app(APP_MACOS_GARAGEBAND);
-                uart_puts("[input-event] Switched container -> 4. macOS GarageBand\n");
-                fb_dump_frame();
-            } else if (key == ' ' || key == '\r' || key == '\n') {
-                compositor_handle_touch(250, 820, TOUCH_EVENT_DOWN);
-                compositor_handle_touch(250, 820, TOUCH_EVENT_UP);
+            if (key == 'I') {
+                /* Check for atomic input packet: INP:<16 hex digits> */
+                char n1 = uart_getc();
+                char n2 = uart_getc();
+                char n3 = uart_getc();
+                if (n1 == 'N' && n2 == 'P' && n3 == ':') {
+                    uint64_t raw64 = 0;
+                    for (int i = 0; i < 16; i++) {
+                        char hc = uart_getc();
+                        raw64 = (raw64 << 4) | hex_to_nibble(hc);
+                    }
+                    /* Discard trailing newline */
+                    while (uart_has_char()) {
+                        char term = uart_getc();
+                        if (term == '\n' || term == '\r') break;
+                    }
+                    /* Store the received packet; latency is not measured. */
+                    input_inject_packet(raw64);
+                    zenin_input_packet_t pkt;
+                    pkt.raw64 = raw64;
+                    if (pkt.data.device == INPUT_DEV_MOUSE || pkt.data.device == INPUT_DEV_TOUCH) {
+                        uint32_t px = (uint32_t)(uint16_t)pkt.data.x_or_key;
+                        uint32_t py = (uint32_t)(uint16_t)pkt.data.y_or_axis;
+                        if (pkt.data.event == (uint8_t)INPUT_EVT_DOWN) {
+                            compositor_handle_touch(px, py, TOUCH_EVENT_DOWN);
+                        }
+                    }
+                    compositor_render_frame();
+                    fb_dump_frame();
+                    continue;
+                }
+            }
+            if (key == '\r' || key == '\n') {
+                continue; /* Ignore stray line endings */
+            }
+
+            /* Container Switching: Global Window Manager Controls */
+            if (key >= '1' && key <= '4') {
+                zenin_container_id_t cid = (zenin_container_id_t)(key - '0');
+                uart_puts("[zenin-wm] Switched active container to ID: ");
+                uart_put_dec((uint32_t)cid);
+                uart_puts("\n");
+                compositor_switch_container(cid);
                 fb_dump_frame();
             } else if (key == 'd' || key == 'D') {
-                /* Explicit frame dump request */
+                uart_puts("[zenin-wm] Manual display scanout refresh\n");
+                compositor_render_frame();
                 fb_dump_frame();
-            } else if (key == 'q' || key == 'Q') {
-                uart_puts("[zenin-shell] Session complete. Re-entering hardware WFI sleep.\n");
-                break;
+            } else {
+                /* Pure Raw Keyboard Forwarding: NO key interception, NO fake action triggers */
+                input_handle_keyboard((uint16_t)key, true);
+                compositor_render_frame();
+                fb_dump_frame();
+                input_handle_keyboard((uint16_t)key, false);
             }
         } else {
             __asm__ volatile("wfi");
         }
-    }
-
-    while (1) {
-        __asm__ volatile("wfi");
     }
 }
