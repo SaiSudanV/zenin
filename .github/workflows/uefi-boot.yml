@@ -31,6 +31,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
+          # QEMU EFI virtio option ROM (efi-virtio.rom); package name varies by release
+          sudo apt-get install -y --no-install-recommends ipxe-qemu \
+            || sudo apt-get install -y --no-install-recommends qemu-system-data
+          ls -l /usr/share/qemu/efi-virtio.rom
 
       - name: Build kernel (native aarch64)
         run: make -C kernel CROSS_COMPILE=
@@ -52,8 +56,7 @@ jobs:
           timeout 300 qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
-            -drive file=dist/zenin-os-uefi.img,format=raw,if=none,id=hd0 \
-            -device virtio-blk-pci,drive=hd0,romfile= \
+            -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
             -display none -serial file:uefi_serial.log
           echo "qemu-exit=$?"
 
