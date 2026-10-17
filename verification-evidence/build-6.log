@@ -1,0 +1,54 @@
+make: Entering directory '/mnt/c/Custom Rom/_gic-ram-verification/kernel'
+Makefile:20: update target 'arch/aarch64/boot.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c arch/aarch64/boot.S -o arch/aarch64/boot.o
+Makefile:23: update target 'arch/aarch64/vectors.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c arch/aarch64/vectors.S -o arch/aarch64/vectors.o
+Makefile:26: update target 'arch/aarch64/irq.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c arch/aarch64/irq.c -o arch/aarch64/irq.o
+Makefile:29: update target 'arch/aarch64/mmu.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c arch/aarch64/mmu.c -o arch/aarch64/mmu.o
+Makefile:32: update target 'sys/kmain.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/kmain.c -o sys/kmain.o
+Makefile:35: update target 'mm/pmm.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c mm/pmm.c -o mm/pmm.o
+Makefile:38: update target 'mm/kheap.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c mm/kheap.c -o mm/kheap.o
+Makefile:41: update target 'mm/kheap_handle.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c mm/kheap_handle.c -o mm/kheap_handle.o
+Makefile:44: update target 'ipc/zbus.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c ipc/zbus.c -o ipc/zbus.o
+Makefile:47: update target 'drivers/fb.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c drivers/fb.c -o drivers/fb.o
+Makefile:50: update target 'drivers/zgl.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c drivers/zgl.c -o drivers/zgl.o
+Makefile:53: update target 'drivers/input.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c drivers/input.c -o drivers/input.o
+Makefile:56: update target 'ui/compositor.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c ui/compositor.c -o ui/compositor.o
+Makefile:59: update target 'ai/intent_engine.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c ai/intent_engine.c -o ai/intent_engine.o
+Makefile:62: update target 'ai/neural_core.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c ai/neural_core.c -o ai/neural_core.o
+Makefile:65: update target 'sys/shell.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/shell.c -o sys/shell.o
+Makefile:68: update target 'sys/compat_launcher.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/compat_launcher.c -o sys/compat_launcher.o
+Makefile:71: update target 'sys/abi_shim.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/abi_shim.c -o sys/abi_shim.o
+Makefile:74: update target 'sys/zpkg.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/zpkg.c -o sys/zpkg.o
+Makefile:77: update target 'sys/zld.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/zld.c -o sys/zld.o
+Makefile:80: update target 'sys/unified_bridge.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/unified_bridge.c -o sys/unified_bridge.o
+Makefile:83: update target 'sys/production_test.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/production_test.c -o sys/production_test.o
+Makefile:86: update target 'sys/container_loader.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/container_loader.c -o sys/container_loader.o
+Makefile:89: update target 'sys/pe_loader.o' due to: target does not exist
+aarch64-linux-gnu-gcc -Wall -Wextra -O2 -ffreestanding -nostdlib -nostartfiles -mcpu=cortex-a53 -mgeneral-regs-only -fno-zero-initialized-in-bss -c sys/pe_loader.c -o sys/pe_loader.o
+Makefile:92: update target 'zenin-kernel.elf' due to: target does not exist
+aarch64-linux-gnu-ld -T arch/aarch64/link.ld -nostdlib arch/aarch64/boot.o arch/aarch64/vectors.o arch/aarch64/irq.o arch/aarch64/mmu.o sys/kmain.o mm/pmm.o mm/kheap.o mm/kheap_handle.o ipc/zbus.o drivers/fb.o drivers/zgl.o drivers/input.o ui/compositor.o ai/intent_engine.o ai/neural_core.o sys/shell.o sys/compat_launcher.o sys/abi_shim.o sys/zpkg.o sys/zld.o sys/unified_bridge.o sys/production_test.o sys/container_loader.o sys/pe_loader.o -o zenin-kernel.elf
+Makefile:95: update target 'zenin-kernel.bin' due to: target does not exist
+aarch64-linux-gnu-objcopy -O binary zenin-kernel.elf zenin-kernel.bin
+make: Leaving directory '/mnt/c/Custom Rom/_gic-ram-verification/kernel'

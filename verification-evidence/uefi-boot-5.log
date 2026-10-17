@@ -1,0 +1,128 @@
+UEFI firmware (version 2026.05-2 built at 15:33:19 on Aug  6 2026)
+[2J[001;001H[=3h[2J[001;001H[2J[001;001H[8;056;240t[2J[001;001HBdsDxe: loading Boot0002 "UEFI Non-Block Boot Device" from PciRoot(0x0)/Pci(0x2,0x0)
+BdsDxe: starting Boot0002 "UEFI Non-Block Boot Device" from PciRoot(0x0)/Pci(0x2,0x0)
+SZENIN-EFI: stub started
+ZENIN-EFI: OS.IMG opened
+ZENIN-EFI: OS.IMG size 0000000000019018
+ZENIN-EFI: OS.IMG loaded; applying boot-env memory-clear contract
+ZENIN-EFI: exiting boot services
+ZENIN-EFI: build_boot_info
+ZENIN-EFI: bss-init-ok
+ZENIN-EFI: d0=0000000000000007
+ZENIN-EFI: boot services exited
+ZENIN-EFI: jump_to_kernel enter
+ZENIN-EFI: jumping to kernel
+
+=====================================================
+   PROJECT ZENIN: BARE-METAL GROUND-UP KERNEL        
+   Architecture: AArch64 Bare-Metal Microkernel      
+   Test target: QEMU virt | Cortex-A53 | 2 GiB RAM
+   Resource targets are measured separately; no CPU/power result yet.
+[zenin-mmu] Zenin AArch64 stage-1 identity map and caches enabled.
+[zenin-mmu] GICD/GICC/UART active descriptors are Device-nGnRnE: PASS.
+=====================================================
+
+[zenin-boot] PMM sized from the firmware memory map.
+[zenin-irq] CurrentEL=1; architectural timer frequency=1000000000 Hz
+[zenin-irq] ID_AA64PFR0.GIC=0; using GICv2
+[zenin-irq] GICv2 programmed; PPI-enable=0800FFFF
+[zenin-irq] QEMU GICv2 registers programmed; timer wake not yet verified.
+[zenin-memory] Framebuffer request: 460800 bytes / 113 pages; PMM accounted 113 pages
+[zenin-input] Input packet state initialized; hardware input drivers are not present.
+[zenin-ai] AArch64 NEON first-layer kernel enabled; model quality is unverified.
+[zenin-shell] Command and intent functions initialized; UART CLI is not integrated.
+[zenin-compat] Multi-OS ABI Shim Layer initialized.
+               Personalities loaded: Linux (POSIX) | Android (Bionic) | Win32 (NT) | macOS (XNU/Mach)
+[zenin-zpkg] Signature probe initialized; extraction/mounting unavailable.
+[zenin-zld] Dynamic Symbol Linker (z-ld.so) initialized:
+            Registered platform shim symbols; ABI coverage is partial.
+            Lookup timing is not measured.
+[zenin-bridge] Layer 11 Unified Graphics & Audio Bridge Initialized:
+               Bound GLES, Direct3D, and Metal symbols directly to Z-GL.
+               Bound OpenSL, XAudio2, and CoreAudio directly to Z-Bus DMA.
+[zenin-mmu] Kernel map frozen: static tables RO, heap subtree XNTable-locked.
+
+=====================================================
+   KERNEL SUBSYSTEM SMOKE CHECKS                    
+=====================================================
+   [PASS] AArch64 stage-1 identity mapping remains active through kernel smoke checks.
+
+[Test 1/7] Physical Memory Manager (PMM) Alloc/Free Test...
+   [PASS] PMM smoke checks: aligned contiguous range, bounds, and free accounting.
+   [PASS] Noncontiguous pages mapped adjacently and across a 2 MiB table boundary; data, duplicate/bounds rejection, TLB invalidation, unmap identity, and PMM reclaim verified.
+   [MEASURED] Back-to-back counter bracket minimum ticks=100.
+   [MEASURED] PMM single-page alloc ticks including timer bracket min/max=140/17132.
+
+[Test 2/7] Kernel Heap (KHeap) Sub-Allocation Test...
+   [PASS] KHeap smoke checks: alignment, invalid/double free rejection, large VM-backed allocation/free.
+   [PASS] Undersized VA hole skipped for a 3-page request (satisfied past it), then reused by a 2-page request; live data and byte accounting intact.
+   [PASS] Reused the same large-object VA range across 64 allocate/free cycles while a guard allocation stayed live.
+   [MEASURED] D010 window guarantee: blocking all max-size gaps needs 786432 allocated pages vs 15151 RAM pages; fragmentation cannot cause allocation failure.
+   [PASS] D010 zero-fragmentation: max-size gap blocking is impossible (guarantee holds), oversize request succeeded past 16 holes, holes reused, live data and accounting intact.
+   [PASS] All six size classes and 32 simultaneous 4 KiB slab objects passed under fragmented PMM backing; longest frame run=1 pages.
+   [PASS] VM-backed 900 KiB allocation used 226 mapped pages; longest contiguous physical run=126 pages. Fragmented backing, boundary data, invalid/double-free, and PMM reclaim checks passed.
+   [TEST] Full handle-table capacity and backing-page budget...
+   [PASS] Filled, overflow-checked, and freed all 131071 handle slots; peak backing was 1024 PMM pages and was fully reclaimed.
+   [TEST] Relocatable-handle compaction under the same fragmentation pattern...
+   [PASS] Handle heap compacted fragmented objects, preserved live data, and rejected stale handles.
+   [MEASURED] Handle compaction+900 KiB allocation over 8 runs ticks incl. timer bracket min/max=286023/349663 (positive OS work; not zero latency).
+   [TEST] Handle population beyond the former 128-object ceiling...
+   [PASS] 256 simultaneous handles survived compaction and data checks.
+   [TEST] Deterministic mixed-size handle allocation/free churn with live-data checks...
+   [PASS] 256 mixed-size operations preserved all checked live-object markers and returned live bytes to zero.
+   [MEASURED] 64-byte slab kmalloc ticks incl. timer bracket min/max=160/14116; kfree=280/13335 (not zero OS latency).
+   [PASS] All raw-pointer heap backing pages returned to PMM after the final live allocation was freed.
+
+[Test 3/7] Z-Bus SPSC Queue Checks...
+   [PASS] Z-Bus SPSC smoke checks: payload, FIFO, full/empty, wraparound, pointer identity.
+
+[Test 4/7] Input Packet Store/Read-Back Smoke Check...
+   [PASS] Input smoke check: injected packet read-back matched.
+
+[Test 5/7] Neural SIMD/Scalar Arithmetic Equivalence...
+   [PASS] Neural first-layer dot products match scalar reference on 128 test cases.
+
+[Test 6/7] System Context Validity and Live Fields...
+   [PASS] System context reports PMM and active parser surface; battery, CPU clock, and network are explicitly unavailable.
+
+[Test 7/7] PMM-Managed Page Accounting...
+   PMM Managed Range:       59 MB
+   Allocated PMM Pages:     114 pages (456 KB / 0.4 MB)
+
+[Test 9/9] W^X mapping split and split-subtree freeze (D012)...
+   [PASS] .text RX, .rodata RO+XN, stack/arenas/heap RW+XN, static tables frozen RO, heap subtree XNTable-locked, heap mapper excludes image/table ranges.
+
+[Test 8/8] OS-added latency vs direct baselines (D011)...
+uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu   [MEASURED] UART putc: baseline min=127307 OS min=126366 OS-added=0 ticks. [PASS] delta=0.
+   [MEASURED] Hot-tier arena/slot alloc: baseline min=110 OS min=110 OS-added=0 ticks. [PASS] delta=0.
+   [MEASURED] Cold PMM page pop: baseline min=130 OS min=140 OS-added=10; page free: baseline min=140 OS min=160 OS-added=20 ticks. [FAIL] positive OS-added latency on PMM cold path.
+[zenin-test] COMPLETE: FAIL (one or more smoke checks failed)
+[zenin-container] Binary format parser prototypes initialized.
+                  Loading, relocation, isolation, and execution are not implemented.
+[zenin-pe] PE parser/partial thunk prototype initialized.
+           Executable loading, x86 translation, and Win32 runtime are not implemented.
+
+=====================================================
+   PROJECT ZENIN: KERNEL PROTOTYPE RUNNING          
+=====================================================
+[zenin-memory] Kernel image code+rodata+data: 104 KiB; BSS: 4248 KiB; boot stack: 64 KiB
+[zenin-memory] PMM-accounted resident pages: 114 pages / 456 KiB
+[zenin-memory] Accounting inputs: kernel-image=4420 KiB; PMM-used=114 pages / 456 KiB
+[zenin-memory] OS-owned resident total: 4876 KiB (kernel image + PMM-used pages; shared counted once)
+[zenin-memory] Lowest usable RAM base: 0x0000000040000000; selected PMM range base: 0x00000000400A0000; kernel load start: 0x0000000040080000
+[zenin-memory] Platform-reserved span below kernel load: UNAVAILABLE (selected PMM range base is above kernel start); not included in OS-owned total
+[zenin-memory] QEMU OS-accounted idle-RAM budget: PASS (<5 MiB); actual-device measurement requires target hardware
+[zenin-status] CPU utilization, power, IPC latency, and FPS: not measured
+
+=====================================================
+   PROJECT ZENIN: LIVE GRAPHICAL INTERACTIVE SESSION 
+=====================================================
+[zenin-shell] RGB565 software framebuffer active; QEMU test dumps over UART
+[zenin-shell] UART controls: keys [1]-[4] select parser-demo surfaces
+[zenin-shell] No native-device input driver or app runtime is active
+[zenin-irq] Timer expired; GIC pending=08000000 HPPIR=0000001B
+[zenin-irq] Timer wake interrupt ID=27 count=1
+[zenin-irq] PASS: one timer IRQ woke the core from WFI.
+[zenin-framebuffer] Exporting software framebuffer bytes over UART.
+---FRAME_START---
+10C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C510C
