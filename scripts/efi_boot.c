@@ -183,7 +183,7 @@ typedef struct {
     u64 magic; u64 kernel_start; u64 kernel_end; u64 ram_count; u64 mmio_count;
 } zenin_boot_info_t;
 #define ZENIN_BOOT_INFO_MAGIC 0x5A454E49424F4F54ULL
-#define ZENIN_BOOT_INFO_MAX_REGIONS 64
+#define ZENIN_BOOT_INFO_MAX_REGIONS 512
 /* Layout: [header][ram[0..MAX)][mmio[0..MAX)] (fixed split, matches boot_info.h). */
 #define ZENIN_BOOT_INFO_BYTES (sizeof(zenin_boot_info_t) + \
                                2u * ZENIN_BOOT_INFO_MAX_REGIONS * sizeof(zenin_boot_range_t))
@@ -207,9 +207,10 @@ static void *build_boot_info(void *out, void *map, u64 map_size, u64 desc_size,
     bi->mmio_count = 0;
     dbg("ZENIN-EFI: bss-init-ok\n");
     u64 off = 0;
+    u64 overflow = 0;
     if (desc_size < sizeof(efi_mem_desc) || desc_size > 256u) desc_size = sizeof(efi_mem_desc);
     u64 iters = 0;
-    while (off + desc_size <= map_size && iters < 512u) {
+    while (off <= map_size && desc_size <= map_size - off && iters < 512u) {
         efi_mem_desc *d = (efi_mem_desc *)((u8 *)map + off);
         if (iters == 0u) { dbg("ZENIN-EFI: d0="); dbg_hex(d->type); }
         if (d->type == 7 /* EfiConventionalMemory */ ||
@@ -218,18 +219,20 @@ static void *build_boot_info(void *out, void *map, u64 map_size, u64 desc_size,
                 regions[bi->ram_count].base = d->phys_start;
                 regions[bi->ram_count].pages = d->num_pages;
                 bi->ram_count++;
-            }
+            } else overflow = 1;
         } else if (d->type == 11 /* EfiMemoryMappedIO */ ||
                    d->type == 0 /* EfiReservedMemoryType */) {
             if (bi->mmio_count < ZENIN_BOOT_INFO_MAX_REGIONS) {
                 mmio[bi->mmio_count].base = d->phys_start;
                 mmio[bi->mmio_count].pages = d->num_pages;
                 bi->mmio_count++;
-            }
+            } else overflow = 1;
         }
         off += desc_size;
         iters++;
     }
+    /* Never let a truncated firmware map masquerade as a complete one. */
+    if (off != map_size || overflow) bi->magic = 0;
     return out;
 }
 

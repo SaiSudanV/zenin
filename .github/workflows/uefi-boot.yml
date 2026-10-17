@@ -1,14 +1,6 @@
-# Real-ARM64 UEFI boot check (Stream C / Phase 1 Goal 1.6).
-#
-# Builds dist/zenin-os-uefi.img on the ubuntu-24.04-arm runner (real Ampere
-# silicon), boots it through AAVMF (UEFI firmware) with a NON-DEFAULT memory
-# size so the firmware GetMemoryMap differs from the QEMU -kernel layout, and
-# asserts the full handoff chain prints:
-#     UEFI -> boot_info -> W^X split-subtree freeze -> [zenin-memory] OS-owned
-#     resident total
-# It surfaces that exact KiB figure in the job log. This is the automated
-# (KVM/QEMU-virt) capture; the authoritative non-QEMU capture is booting the
-# same artifact on Oracle Ampere A1 / AWS Graviton (see docs/phase1-cloud-boot.md).
+# ARM64-hosted QEMU/AAVMF verification. The runner architecture is ARM64, but
+# the kernel under test always executes as a QEMU guest, never as a direct
+# physical-hardware boot.
 name: uefi-boot
 
 on:
@@ -17,6 +9,7 @@ on:
       - "kernel/**"
       - "scripts/build_os_image.py"
       - "scripts/efi_boot.c"
+      - "scripts/test_memory_accounting.c"
       - ".github/workflows/uefi-boot.yml"
   workflow_dispatch:
 
@@ -31,60 +24,151 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc make qemu-system-arm qemu-efi-aarch64 mtools dosfstools
-          # The runner's QEMU defaults every PCI device to efi-virtio.rom but the ROM
-          # is absent and not packaged. Create a no-op PCI option ROM (0x55AA sig +
-          # retf). AAVMF uses its own VirtioBlkDxe, so the ROM is never executed.
+          # QEMU references this ROM by default for PCI devices. AAVMF uses its
+          # own VirtioBlkDxe; the no-op ROM is not executed.
           sudo mkdir -p /usr/share/qemu
           printf '\x55\xaa\x01\xcb' | sudo dd of=/usr/share/qemu/efi-virtio.rom bs=512 count=1 conv=sync 2>/dev/null
-          ls -l /usr/share/qemu/efi-virtio.rom
 
-      - name: Build kernel (native aarch64)
-        run: make -C kernel CROSS_COMPILE=
-
-      - name: Build installable UEFI image
+      - name: Validate range and accounting arithmetic
         run: |
+          set -euo pipefail
+          gcc -std=c11 -Wall -Wextra -Werror scripts/test_memory_accounting.c \
+            -o "$RUNNER_TEMP/test_memory_accounting"
+          "$RUNNER_TEMP/test_memory_accounting"
+
+      - name: Clean-build kernel from source and record hashes
+        run: |
+          set -euo pipefail
+          : > build-evidence.txt
+          {
+            echo "source-revision: $(git rev-parse HEAD)"
+            echo "initial-git-status:"
+            git status --short --untracked-files=all
+            echo "runner-architecture: $(uname -m)"
+            echo "compiler: $(gcc --version | head -n 1)"
+            echo "initial tracked artifact hashes (before clean):"
+            sha256sum kernel/arch/aarch64/mmu.c kernel/arch/aarch64/mmu.o \
+              kernel/zenin-kernel.elf kernel/zenin-kernel.bin
+            echo "initial source/object timestamps (UTC):"
+            stat -c '%n %y' kernel/arch/aarch64/mmu.c kernel/arch/aarch64/mmu.o
+          } | tee -a build-evidence.txt
+
+          # This is a fresh Actions checkout. `clean` removes only the explicit
+          # object and kernel outputs listed by kernel/Makefile; it does not
+          # delete arbitrary or untracked files. This prevents tracked stale
+          # objects from satisfying Make's timestamp checks.
+          make -C kernel clean CROSS_COMPILE= 2>&1 | tee -a build-evidence.txt
+          make --trace -C kernel CROSS_COMPILE= 2>&1 | tee -a build-evidence.txt
+          test -s kernel/arch/aarch64/mmu.o
+          test -s kernel/zenin-kernel.elf
+          test -s kernel/zenin-kernel.bin
+          {
+            echo "rebuilt artifact hashes:"
+            sha256sum kernel/arch/aarch64/mmu.c kernel/arch/aarch64/mmu.o \
+              kernel/zenin-kernel.elf kernel/zenin-kernel.bin
+            echo "rebuilt source/object timestamps (UTC):"
+            stat -c '%n %y' kernel/arch/aarch64/mmu.c kernel/arch/aarch64/mmu.o
+          } | tee -a build-evidence.txt
+
+      - name: Assemble UEFI image and prove payload provenance
+        run: |
+          set -euo pipefail
           python3 scripts/build_os_image.py \
-            --toolchain-prefix= --size-tool=size --objdump=objdump
-          ls -l dist/zenin-os-uefi.img
+            --toolchain-prefix= --size-tool=size --objdump=objdump \
+            --source-revision="$GITHUB_SHA" \
+            2>&1 | tee -a build-evidence.txt
+          cmp kernel/zenin-kernel.elf dist/zenin-os.elf
+          cmp kernel/zenin-kernel.bin dist/zenin-os.img
+          mcopy -i dist/zenin-os-uefi.img ::/ZENIN/OS.IMG "$RUNNER_TEMP/uefi-os.img"
+          cmp kernel/zenin-kernel.bin "$RUNNER_TEMP/uefi-os.img"
+          {
+            echo "verified image payloads: kernel ELF and flat image are byte-identical; FAT OS.IMG matches flat image"
+            echo "final artifact hashes:"
+            sha256sum kernel/arch/aarch64/mmu.c kernel/arch/aarch64/mmu.o \
+              kernel/zenin-kernel.elf kernel/zenin-kernel.bin \
+              dist/zenin-os-uefi.img
+          } | tee -a build-evidence.txt
 
-      - name: Boot image under AAVMF (non-default memory size)
+      - name: Boot under AAVMF and preserve serial output
         run: |
-          set +e
+          set -uo pipefail
+          rm -f uefi_serial.log qemu.log
           KVM=""
-          if [ -e /dev/kvm ]; then KVM="-enable-kvm"; fi
+          if [ -e /dev/kvm ]; then
+            KVM="-enable-kvm"
+            ACCEL="KVM enabled"
+          else
+            ACCEL="QEMU software emulation (no /dev/kvm)"
+          fi
+          {
+            echo "runner-architecture: $(uname -m)"
+            echo "execution: QEMU AArch64 guest with AAVMF; $ACCEL"
+            qemu-system-aarch64 --version | head -n 1
+          } | tee -a build-evidence.txt
           AAVMF=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd
-          # -m 3072 (3 GiB) differs from the QEMU -kernel 2 GiB default, so the
-          # firmware GetMemoryMap / usable-RAM discovery is genuinely exercised.
           qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
             -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
-            -display none -serial file:uefi_serial.log &
+            -display none -serial file:uefi_serial.log >qemu.log 2>&1 &
           QP=$!
-          # The kernel never powers off; kill QEMU the instant the smoke suite ends.
           for i in $(seq 1 120); do
-            grep -aq "PASS: one timer IRQ" uefi_serial.log 2>/dev/null && break
+            if grep -aq "PASS: one timer IRQ" uefi_serial.log 2>/dev/null && \
+               grep -aq "OS-owned resident total:" uefi_serial.log 2>/dev/null && \
+               grep -aq "\[zenin-test\] COMPLETE:" uefi_serial.log 2>/dev/null; then
+              break
+            fi
+            if ! kill -0 "$QP" 2>/dev/null; then break; fi
             sleep 1
           done
-          kill $QP 2>/dev/null || true
-          echo "boot loop done"
+          kill "$QP" 2>/dev/null || true
+          wait "$QP" 2>/dev/null
+          QEMU_STATUS=$?
+          echo "qemu-exit-after-capture: $QEMU_STATUS" | tee -a build-evidence.txt
+          echo "boot capture loop finished"
 
-      - name: Assert handoff chain + surface idle-RAM figure
+      - name: Assert GIC, timer, W^X and idle-RAM evidence
         run: |
-          echo "=== UEFI boot serial (tail) ==="
-          tail -n 60 uefi_serial.log || true
-          echo "=== assertions ==="
-          grep -a "zenin-mmu" uefi_serial.log | grep -a "frozen" \
-            || { echo "W^X split-subtree freeze line missing"; exit 1; }
-          grep -a "Test 9/9" uefi_serial.log \
-            || { echo "Test 9 (W^X) did not run"; exit 1; }
-          grep -a "\[PASS\] .text RX" uefi_serial.log \
-            || { echo "W^X regression did not pass"; exit 1; }
-          # Gate on the idle-RAM measurement and print the exact figure.
-          line=$(grep -a "OS-owned resident total" uefi_serial.log)
-          echo "$line" || { echo "idle-RAM line missing"; exit 1; }
-          kib=$(echo "$line" | sed -n 's/.*: \([0-9][0-9]*\) KiB.*/\1/p')
-          echo "OS-owned resident total = ${kib} KiB"
-          test -n "$kib" || { echo "could not parse KiB"; exit 1; }
-          test "$kib" -lt 5120 || { echo "idle RAM ${kib} KiB >= 5 MiB"; exit 1; }
-          echo "1.6 idle-RAM (AAVMF/real-CPU): ${kib} KiB (< 5 MiB) PASS"
+          set -euo pipefail
+          echo "=== Full UEFI serial log ==="
+          cat uefi_serial.log
+          echo "=== QEMU stderr/stdout ==="
+          cat qemu.log
+          grep -aF "[zenin-mmu] GICD/GICC/UART active descriptors are Device-nGnRnE: PASS." uefi_serial.log
+          grep -aF "[zenin-irq] GICv2 programmed" uefi_serial.log
+          grep -aF "[zenin-irq] PASS: one timer IRQ woke the core from WFI." uefi_serial.log
+          grep -aF "[zenin-mmu] Kernel map frozen" uefi_serial.log
+          grep -aF "[Test 9/9] W^X mapping split and split-subtree freeze" uefi_serial.log
+          grep -a "\[PASS\] \.text RX" uefi_serial.log
+          grep -aF "[zenin-test] COMPLETE:" uefi_serial.log
+          line=$(grep -aF "[zenin-memory] OS-owned resident total:" uefi_serial.log | tail -n 1)
+          echo "$line"
+          kib=$(echo "$line" | sed -n 's/.*resident total: \([0-9][0-9]*\) KiB.*/\1/p')
+          test -n "$kib" || { echo "resident total is missing or invalid"; exit 1; }
+          test "$kib" -lt 5120 || { echo "idle RAM ${kib} KiB >= 5120 KiB"; exit 1; }
+          echo "measured OS-owned resident total: ${kib} KiB (< 5120 KiB PASS)"
+          grep -aF "[zenin-memory] QEMU OS-accounted idle-RAM budget: PASS (<5 MiB)" uefi_serial.log
+          grep -aF "[zenin-memory] Platform-reserved span below kernel load:" uefi_serial.log
+          if grep -aqF "[zenin-test] COMPLETE: FAIL" uefi_serial.log; then
+            echo "::warning::Kernel smoke suite completed with failures; inspect the full serial log. GIC, timer, W^X, and RAM checks are evaluated separately."
+          fi
+          {
+            echo "hosted-environment: ubuntu-24.04-arm; QEMU/AAVMF guest (not direct physical boot)"
+            echo "idle-os-owned-resident-kib: $kib"
+            echo "idle-os-owned-budget-kib: 5120 (strictly less than)"
+            echo "kernel-smoke-suite: $(grep -aF '[zenin-test] COMPLETE:' uefi_serial.log | tail -n 1)"
+          } | tee -a build-evidence.txt
+
+      - name: Upload build and boot evidence, including failed runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uefi-verification-${{ github.run_id }}-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            build-evidence.txt
+            uefi_serial.log
+            qemu.log
+            dist/zenin-os.elf
+            dist/zenin-os.img
+            dist/zenin-os-uefi.img

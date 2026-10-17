@@ -68,7 +68,9 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def git_revision():
+def git_revision(source_revision=None):
+    if source_revision:
+        return source_revision
     try:
         rev = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT,
@@ -326,6 +328,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--size-tool", default="aarch64-none-elf-size")
     ap.add_argument("--objdump", default="aarch64-none-elf-objdump")
+    ap.add_argument("--source-revision", default=None,
+                    help="exact source commit SHA to record in the manifest")
     ap.add_argument("--toolchain-prefix",
                     default="C:/toolchains/arm-gnu-aarch64/bin/aarch64-none-elf-")
     args = ap.parse_args()
@@ -393,7 +397,7 @@ def main():
 
     elf_size = os.path.getsize(out_elf)
     img_size = os.path.getsize(out_img)
-    rev = git_revision()
+    rev = git_revision(args.source_revision)
 
     lines = []
     lines.append("Project Zenin — Installable OS Image Manifest")

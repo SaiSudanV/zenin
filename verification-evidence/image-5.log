@@ -1,0 +1,75 @@
+Project Zenin — Installable OS Image Manifest
+============================================
+
+image-name: zenin-os
+source-revision: dd5b6074727de580f8a18a052f6315ee6fa70b36
+toolchain: GNU size | (GNU Binutils for Debian) 2.47
+build: reproducible (no timestamps or absolute paths embedded)
+platform-contract: AArch64; QEMU virt (gic-version=2); flat image load address 0x40080000
+
+Components (all classes required by Goal 1.7 are present in-image)
+----------------------------------------------------------------
+component: kernel-core
+  class: kernel
+  members: arch/aarch64/boot.o, arch/aarch64/vectors.o, arch/aarch64/irq.o, arch/aarch64/mmu.o, sys/kmain.o, mm/pmm.o, mm/kheap.o, mm/kheap_handle.o
+  footprint: text=27909 data=68 bss=4259924 bytes
+  notes: ARM64 boot/entry/exceptions, PMM, MMU, kernel heap, handle heap
+component: base-system
+  class: base system
+  members: sys/shell.o, sys/zpkg.o, sys/zld.o, ui/compositor.o, drivers/zgl.o, drivers/fb.o, drivers/input.o, ipc/zbus.o, sys/unified_bridge.o, sys/abi_shim.o, sys/compat_launcher.o
+  footprint: text=26781 data=392 bss=4544 bytes
+  notes: shell, Z-Bus, package/linker services, compositor/graphics, input, ABI/compat dispatch
+component: ai-services
+  class: AI services + shipped models/weights
+  members: ai/neural_core.o, ai/intent_engine.o
+  footprint: text=2525 data=0 bss=0 bytes
+  notes: embedded neural engine and shipped prototype classifier weights (hand-authored; not a validated trained model)
+component: bundled-runtimes
+  class: bundled runtimes
+  members: sys/container_loader.o, sys/pe_loader.o
+  footprint: text=12086 data=0 bss=0 bytes
+  notes: binary-format runtime subsystems (ELF/PE/Mach-O/APK loaders; prototype)
+component: verification
+  class: verification
+  members: sys/production_test.o
+  footprint: text=24981 data=52 bss=78080 bytes
+  notes: in-kernel production/smoke test suite
+
+component-footprint-totals: text=94282 data=512 bss=4342548 bytes (linked into the image; counted once)
+
+Artifacts
+---------
+artifact: dist/zenin-os.elf
+  role: bootable ELF system image (QEMU -kernel verified boot path)
+  size-bytes: 183952
+  sha256: ad1cf3b75db0b38013c4049cafa7e2b9840fb7cb451ac4153b3c1cf88b2c6553
+artifact: dist/zenin-os.img
+  role: flat OS image (load at 0x40080000; embedded in the UEFI disk)
+  size-bytes: 102424
+  sha256: a0e74c1e50648aae06cd5baa778abfb515d57180fcaaf5d0551ce67f722dafc9
+artifact: dist/BOOTAA64.EFI
+  role: UEFI boot stub (PE32+ AArch64 EFI application; loads the OS image and jumps to it)
+  size-bytes: 144896
+  sha256: b36e41133a413f73c9f773956314aad6f8e178db9d7d2fc38eba3f70a8fe38fb
+artifact: dist/zenin-os-uefi.img
+  role: installable bootable OS disk (FAT16: EFI/BOOT/BOOTAA64.EFI + ZENIN/OS.IMG;
+        boots on ARM64 UEFI firmware)
+  size-bytes: 67108864
+  sha256: fd7b3f7e63209e81d1ce6ac35cc4a4a571b2638bcd7e45733dbbe39c21b178e6
+
+installable-image-size: 67108864 bytes (64.00 MiB)
+size-requirement: <= 300 MiB -> PASS
+
+Scope notes
+-----------
+- The image is complete for the current OS: kernel, base system,
+  AI services with shipped models/weights, and bundled runtimes are
+  all linked into the OS image and enumerated above.
+- Shipped models/weights are hand-authored prototype classifier
+  weights; bundled runtimes are prototype format subsystems.
+- Verified boot paths: QEMU virt platform kernel loader and ARM64
+  UEFI (AAVMF) loading EFI/BOOT/BOOTAA64.EFI from the disk image.
+- Install path: write dist/zenin-os-uefi.img to storage (or attach
+  as a disk) on an ARM64 UEFI platform.
+
+manifest-sha256: ee238b50847eba651a96b386a3051569494654b3319bcbcafe267b4ae3e91dfa

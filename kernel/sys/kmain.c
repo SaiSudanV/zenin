@@ -31,6 +31,7 @@
 #include "../include/hal_cpu.h"
 #include "../include/irq.h"
 #include "../include/boot_info.h"
+#include "../include/memory_accounting.h"
 #include "../include/arch/aarch64/mmu.h"
 
 extern char __kernel_end;
@@ -72,34 +73,62 @@ void kmain(uint64_t boot_info) {
     uart_puts(arch_mmu_identity_map_installed()
                   ? "[zenin-mmu] Zenin AArch64 stage-1 identity map and caches enabled.\n"
                   : "[zenin-mmu] Zenin identity map not installed (translation was already enabled or setup skipped).\n");
+    uart_puts(arch_mmu_device_window_verified()
+                  ? "[zenin-mmu] GICD/GICC/UART active descriptors are Device-nGnRnE: PASS.\n"
+                  : "[zenin-mmu] GICD/GICC/UART active descriptors are not Device-nGnRnE: FAIL.\n");
     uart_puts("=====================================================\n\n");
 
     /* 1. Initialize Physical Memory Manager.
      * Stream C: size the PMM from the firmware memory map the UEFI stub passed
      * in x0 (boot_info) when present; fall back to the QEMU virt layout. */
     const zenin_boot_info_t *bi = (const zenin_boot_info_t *)boot_info;
-    uintptr_t ram_base, ram_end;
-    bool have_map = boot_info && bi->magic == ZENIN_BOOT_INFO_MAGIC && bi->ram_count > 0;
+    uintptr_t ram_base, ram_end, lowest_ram_base;
+    bool descriptor_valid = zenin_boot_info_valid(bi);
+    if (boot_info && !descriptor_valid) {
+        uart_puts("[zenin-boot] Invalid firmware memory map; reason=");
+        if (bi->magic != ZENIN_BOOT_INFO_MAGIC) {
+            uart_puts("bad magic or truncated firmware map");
+        } else {
+            uart_put_dec((size_t)zenin_boot_info_error(bi));
+        }
+        uart_puts(" ram-count=");
+        uart_put_dec((size_t)bi->ram_count);
+        uart_puts(" mmio-count=");
+        uart_put_dec((size_t)bi->mmio_count);
+        uart_puts("; refusing unsafe PMM setup.\n");
+        for (;;) __asm__ volatile("wfi");
+    }
+    bool have_map = descriptor_valid;
     if (have_map) {
         const zenin_boot_range_t *regions = zenin_boot_ram(bi);
         uintptr_t k_end = (uintptr_t)&__kernel_end;
-        ram_base = 0; ram_end = 0;
+        ram_base = 0;
+        ram_end = 0;
+        lowest_ram_base = UINTPTR_MAX;
         for (uint64_t i = 0; i < bi->ram_count; i++) {
             uintptr_t b = (uintptr_t)regions[i].base;
-            uintptr_t e = b + (uintptr_t)regions[i].pages * 4096u;
-            if (k_end > b && k_end <= e) { ram_base = b; ram_end = e; break; }
+            uint64_t checked_end;
+            if (!zenin_boot_range_end(&regions[i], &checked_end) ||
+                checked_end > UINTPTR_MAX) {
+                uart_puts("[zenin-boot] Firmware RAM range exceeds address width.\n");
+                for (;;) __asm__ volatile("wfi");
+            }
+            uintptr_t e = (uintptr_t)checked_end;
+            if (b < lowest_ram_base) lowest_ram_base = b;
+            if (ram_end == 0 && k_end > b && k_end <= e) {
+                ram_base = b;
+                ram_end = e;
+            }
         }
         if (ram_end == 0) {
-            for (uint64_t i = 0; i < bi->ram_count; i++) {
-                uintptr_t b = (uintptr_t)regions[i].base;
-                uintptr_t e = b + (uintptr_t)regions[i].pages * 4096u;
-                if (e - b > ram_end - ram_base) { ram_base = b; ram_end = e; }
-            }
+            uart_puts("[zenin-boot] No validated firmware RAM range contains kernel end.\n");
+            for (;;) __asm__ volatile("wfi");
         }
         uart_puts("[zenin-boot] PMM sized from the firmware memory map.\n");
     } else {
         ram_base = 0x40000000ULL;
         ram_end = ram_base + 2048ULL * 1024 * 1024;
+        lowest_ram_base = ram_base;
         uart_puts("[zenin-boot] No valid boot-info; using QEMU virt RAM fallback.\n");
     }
     uintptr_t mem_start = (uintptr_t)&__kernel_end;
@@ -162,9 +191,10 @@ void kmain(uint64_t boot_info) {
     arch_mmu_freeze_kernel_map();
     uart_puts("[zenin-mmu] Kernel map frozen: static tables RO, heap subtree XNTable-locked.\n");
     production_test_init();
-    if (!production_run_smoke_tests()) {
-        uart_puts("[zenin-test] One or more kernel smoke checks failed.\n");
-    }
+    bool smoke_tests_passed = production_run_smoke_tests();
+    uart_puts(smoke_tests_passed
+                  ? "[zenin-test] COMPLETE: PASS\n"
+                  : "[zenin-test] COMPLETE: FAIL (one or more smoke checks failed)\n");
 
     /* 13. Format parser prototypes; these do not execute application binaries. */
     container_subsystem_init();
@@ -177,13 +207,28 @@ void kmain(uint64_t boot_info) {
     size_t free_pg = pmm_get_free_pages();
     size_t total_pg = pmm_get_total_pages();
     size_t used_pg = total_pg - free_pg;
-    size_t allocator_bytes = used_pg * PAGE_SIZE;
-    size_t kernel_image_bytes = (uintptr_t)&__kernel_end - (uintptr_t)&__kernel_start;
-    size_t image_rw_bytes = (uintptr_t)&__bss_start - (uintptr_t)&__kernel_start;
-    size_t bss_bytes = (uintptr_t)&__bss_end - (uintptr_t)&__bss_start;
-    size_t stack_bytes = (uintptr_t)&__kernel_end - (uintptr_t)&__stack_bottom;
-    size_t accounted_bytes = allocator_bytes + kernel_image_bytes;
-    size_t platform_reserved_bytes = (uintptr_t)&__kernel_start - ram_base;
+    uint64_t allocator_bytes = 0;
+    uint64_t kernel_start_addr = (uintptr_t)&__kernel_start;
+    uint64_t kernel_end_addr = (uintptr_t)&__kernel_end;
+    uint64_t image_rw_bytes = 0, bss_bytes = 0, stack_bytes = 0;
+    uint64_t accounted_bytes = 0;
+    bool image_bounds_valid = kernel_end_addr > kernel_start_addr &&
+        (uintptr_t)&__bss_start >= (uintptr_t)&__kernel_start &&
+        (uintptr_t)&__bss_end >= (uintptr_t)&__bss_start &&
+        (uintptr_t)&__stack_bottom >= (uintptr_t)&__bss_end &&
+        (uintptr_t)&__kernel_end >= (uintptr_t)&__stack_bottom;
+    bool accounting_valid = image_bounds_valid &&
+        zenin_pages_to_bytes((uint64_t)used_pg, &allocator_bytes) &&
+        zenin_os_owned_resident_bytes(kernel_start_addr, kernel_end_addr,
+                                      (uint64_t)used_pg, &accounted_bytes);
+    if (image_bounds_valid) {
+        image_rw_bytes = (uintptr_t)&__bss_start - (uintptr_t)&__kernel_start;
+        bss_bytes = (uintptr_t)&__bss_end - (uintptr_t)&__bss_start;
+        stack_bytes = (uintptr_t)&__kernel_end - (uintptr_t)&__stack_bottom;
+    }
+    uint64_t platform_reserved_bytes = 0;
+    bool platform_reserved_valid = zenin_platform_reserved_before_kernel(
+        kernel_start_addr, (uint64_t)ram_base, &platform_reserved_bytes);
 
     uart_puts("\n=====================================================\n");
     uart_puts("   PROJECT ZENIN: KERNEL PROTOTYPE RUNNING          \n");
@@ -198,12 +243,38 @@ void kmain(uint64_t boot_info) {
     uart_put_dec(used_pg);
     uart_puts(" pages / ");
     uart_put_dec(allocator_bytes / 1024);
-    uart_puts(" KiB\n[zenin-memory] OS-owned resident total (image+BSS+stack+PMM pages; shared allocations counted once): ");
-    uart_put_dec(accounted_bytes / 1024);
-    uart_puts(" KiB\n[zenin-memory] Platform-reserved (reported separately, not OS-owned): ");
-    uart_put_dec(platform_reserved_bytes / 1024);
-    uart_puts(" KiB below kernel load address; device MMIO regions are outside the RAM window\n");
-    if (accounted_bytes < (5u * 1024u * 1024u)) {
+    uart_puts(" KiB\n");
+    if (accounting_valid) {
+        uart_puts("[zenin-memory] Accounting inputs: kernel-image=");
+        uart_put_dec((size_t)((kernel_end_addr - kernel_start_addr) / 1024));
+        uart_puts(" KiB; PMM-used=");
+        uart_put_dec(used_pg);
+        uart_puts(" pages / ");
+        uart_put_dec((size_t)(allocator_bytes / 1024));
+        uart_puts(" KiB\n");
+        uart_puts("[zenin-memory] OS-owned resident total: ");
+        uart_put_dec(accounted_bytes / 1024);
+        uart_puts(" KiB (kernel image + PMM-used pages; shared counted once)\n");
+    } else {
+        uart_puts("[zenin-memory] OS-owned resident total: UNAVAILABLE (invalid range or arithmetic)\n");
+    }
+    uart_puts("[zenin-memory] Lowest usable RAM base: 0x");
+    uart_put_hex64((uint64_t)lowest_ram_base);
+    uart_puts("; selected PMM range base: 0x");
+    uart_put_hex64((uint64_t)ram_base);
+    uart_puts("; kernel load start: 0x");
+    uart_put_hex64(kernel_start_addr);
+    uart_puts("\n");
+    if (platform_reserved_valid) {
+        uart_puts("[zenin-memory] Platform-reserved span below kernel load (reported separately, not OS-owned): ");
+        uart_put_dec(platform_reserved_bytes / 1024);
+        uart_puts(" KiB; device MMIO is outside this span\n");
+    } else {
+        uart_puts("[zenin-memory] Platform-reserved span below kernel load: UNAVAILABLE (selected PMM range base is above kernel start); not included in OS-owned total\n");
+    }
+    if (!accounting_valid) {
+        uart_puts("[zenin-memory] QEMU OS-accounted idle-RAM budget: UNAVAILABLE (accounting validation failed)\n");
+    } else if (zenin_idle_ram_within_budget(accounted_bytes, 5ULL * 1024 * 1024)) {
         uart_puts("[zenin-memory] QEMU OS-accounted idle-RAM budget: PASS (<5 MiB); actual-device measurement requires target hardware\n");
     } else {
         uart_puts("[zenin-memory] QEMU OS-accounted idle-RAM budget: FAIL (>=5 MiB)\n");
@@ -219,13 +290,12 @@ void kmain(uint64_t boot_info) {
     uart_puts("[zenin-shell] No native-device input driver or app runtime is active\n");
 
     compositor_render_frame();
-    fb_dump_frame();
-
     if (irq_ready && zenin_irq_test_wfi()) {
         uart_puts("[zenin-irq] PASS: one timer IRQ woke the core from WFI.\n");
     } else {
         uart_puts("[zenin-irq] FAIL: timer wake from WFI was not verified.\n");
     }
+    fb_dump_frame();
 
     while (1) {
         if (uart_has_char()) {

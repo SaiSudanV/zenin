@@ -24,6 +24,7 @@
 #define DESC_VALID       (1ULL << 0)
 #define DESC_TABLE       (1ULL << 1) /* table descriptor (or L3 page: 0b11) */
 #define DESC_ATTRIDX(n)  ((uint64_t)(n) << 2)
+#define DESC_ATTRIDX_MASK (7ULL << 2)
 #define DESC_AP_RW_EL1   (0ULL << 6) /* EL1 RW (WXN then forces XN) */
 #define DESC_AP_RO_EL1   (2ULL << 6) /* EL1 Read-Only */
 #define DESC_SH_INNER    (3ULL << 8)
@@ -112,7 +113,9 @@ static unsigned dyn_l2_used;
  * blocks. Uses 1 GiB L1 blocks where a window is fully covered and 2 MiB L2
  * blocks otherwise. The kernel's own 1 GiB window (W^X) is skipped. */
 static void map_range(uint64_t base, uint64_t len, bool device) {
+    if (len == 0 || base > UINT64_MAX - len) return;
     uint64_t end = base + len;
+    if (end > ZENIN_BOOT_ADDRESS_LIMIT) return;
     uint64_t kernel_gib = (uint64_t)&__kernel_start & ~((uint64_t)0x3FFFFFFF);
     for (uint64_t va = base & ~((uint64_t)0x3FFFFFFF); va < end; va += (1ULL << 30)) {
         if (va == kernel_gib) continue; /* kernel_l2 owns this window (W^X) */
@@ -176,6 +179,22 @@ static uint64_t walk_desc(uint64_t va) {
     uint64_t *l3 = desc_table(d2);
     uint64_t d3 = l3[l3_index(va)];
     return (d3 & DESC_VALID) ? d3 : 0;
+}
+
+static bool address_is_device(uint64_t va) {
+    uint64_t desc = walk_desc(va);
+    return (desc & DESC_VALID) != 0 &&
+           (desc & DESC_ATTRIDX_MASK) == DESC_ATTRIDX(0) &&
+           (desc & DESC_AF) != 0;
+}
+
+/* Runtime inspection of the actual active page tables, not a source-level
+ * assertion. The virt GICD/GICC and PL011 UART must use MAIR attr 0
+ * (Device-nGnRnE) before interrupt-controller MMIO is trusted. */
+bool arch_mmu_device_window_verified(void) {
+    return address_is_device(0x08000000ULL) &&
+           address_is_device(0x08010000ULL) &&
+           address_is_device(0x09000000ULL);
 }
 
 /* Heap walk with lazy L2/L3 creation (heap L1s are pre-created). */

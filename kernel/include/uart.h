@@ -58,6 +58,13 @@ static inline void uart_put_hex(uint64_t val) {
     uart_putc(hex_chars[val & 0xF]);
 }
 
+static inline void uart_put_hex64(uint64_t val) {
+    const char hex_chars[] = "0123456789ABCDEF";
+    for (int shift = 60; shift >= 0; shift -= 4) {
+        uart_putc(hex_chars[(val >> shift) & 0xF]);
+    }
+}
+
 static inline void uart_put_dec(size_t val) {
     if (val == 0) {
         uart_putc('0');

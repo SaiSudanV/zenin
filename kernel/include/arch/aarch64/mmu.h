@@ -23,6 +23,7 @@
 #include "../../boot_info.h"
 void arch_mmu_enable(const zenin_boot_info_t *boot_info);
 bool arch_mmu_identity_map_installed(void);
+bool arch_mmu_device_window_verified(void);
 bool arch_vm_map_heap_page(uintptr_t virtual_address, uintptr_t physical_address);
 bool arch_vm_query_heap_page(uintptr_t virtual_address, uintptr_t *physical_address);
 bool arch_vm_unmap_heap_page(uintptr_t virtual_address, uintptr_t *physical_address);

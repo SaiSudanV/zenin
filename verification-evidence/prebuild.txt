@@ -1,0 +1,8 @@
+source-revision=dd5b6074727de580f8a18a052f6315ee6fa70b36
+aarch64-linux-gnu-gcc (Debian 16.1.0-3) 16.1.0
+4304ae9420d8dbe3aca0168de7150746d89138c90636b61ad4f35bcd05bff52f  kernel/arch/aarch64/mmu.c
+ac5c16bf7dc3b1214d4dd73fcd3a2fe7aa59c37bf3f2c615e047cc2ff79eaf82  kernel/arch/aarch64/mmu.o
+e164ba3f664a580eabff830a1fc8dc83089e4e0aaeb55a0e06e37cb0c0bc3c35  kernel/zenin-kernel.elf
+09f00e9f78a5e723b02fcbff17361fc9c573cb52b8595ec8447ef9b93a15ed37  kernel/zenin-kernel.bin
+kernel/arch/aarch64/mmu.c 2026-10-17 12:22:50.016170600 +0530
+kernel/arch/aarch64/mmu.o 2026-10-17 12:17:24.178773800 +0530
