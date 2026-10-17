@@ -390,6 +390,11 @@ void arch_mmu_enable(const zenin_boot_info_t *boot_info) {
     if (zenin_boot_info_valid(boot_info)) {
         const zenin_boot_range_t *ram = zenin_boot_ram(boot_info);
         const zenin_boot_range_t *mmio = zenin_boot_mmio(boot_info);
+        /* GIC (0x08000000) + UART (0x09000000): never depend on UEFI listing
+         * them in GetMemoryMap() — Ubuntu AAVMF omits the GIC window entirely.
+         * Map 0x08000000..0x09FFFFFF as Device-nGnRnE unconditionally so
+         * GICD/GICC accesses can never fault regardless of the firmware map. */
+        map_range(0x08000000ULL, 0x02000000ULL, true);
         for (uint64_t i = 0; i < boot_info->ram_count; i++) {
             /* Never map firmware RAM below 1 GiB as normal memory: that range is
              * the fixed device window (GIC 0x08000000, UART 0x09000000). */

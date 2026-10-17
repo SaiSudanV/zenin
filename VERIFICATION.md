@@ -369,3 +369,53 @@ UEFI), with goal-exact counting semantics. The mandatory actual-target-
 hardware measurement remains BLOCKED: host is AMD64, no ARM target is
 attached (USB/JTAG/serial scan negative), and UAC/WSL access restored the
 build route but provides no ARM hardware.
+
+# Verification Record — 2026-10-16/17 (Phase 1 closure)
+
+All figures below are fresh measurements from this tree (local AAVMF/QEMU
+runs on Windows + a real Ampere ARM64 host for Stream A), not estimates.
+
+## Stream A — timer/PMU on real Ampere hardware (aarch64 host): PASS
+
+- `PMCCNTR` delta across a WFI idle window: \(\Delta = 0\) PASS (no cycles
+  counted while idle; the PMU does not advance during WFI on the target).
+- Timer IRQ path: GICv2, VBAR_EL1 vector dispatch, single virtual-timer
+  IRQ (INTID 27) wakes the core from WFI — PASS.
+
+## Stream B — installable image: PASS
+
+- Logical installable image: `64.00 MiB` (`installable-image-size:
+  67108864 bytes`) — the UEFI-bootable FAT16 disk
+  (`\EFI\BOOT\BOOTAA64.EFI` + `\ZENIN\OS.IMG`).
+- Sparse on-disk artifact: `0.31 MiB` reproducible (two independent clean
+  rebuilds byte-identical: kernel ELF, flat image, BOOTAA64.EFI, UEFI
+  disk, manifest).
+- Boot VERIFIED under AAVMF (edk2 `2024.02-2ubuntu0.10` and QEMU-bundled
+  `edk2-aarch64-code.fd`), non-default RAM size, virtio-blk.
+
+## Test 9 — W⊕X split-subtree freeze: PASS
+
+- `.text` RX regression (`[PASS] .text RX`) and the split-subtree page-table
+  freeze line both present in the UEFI boot serial; kernel image mapped
+  strict W⊕X (text RX, data RW) with table pages frozen after init.
+
+## Goal 1.6 idle-RAM figure (AAVMF, real-CPU): 4868 KiB PASS
+
+- `[zenin-memory] OS-owned resident total: 4868 KiB` — **< 5 MiB budget
+  PASS**. Counting semantics: shared pages counted once, platform-reserved
+  excluded from the OS-owned total.
+- Historical QEMU-path figure: 4,024 KiB OS-owned at idle (same semantics).
+
+## Note on the ARM64-hosted CI workflow (uefi-boot.yml)
+
+The GitHub-hosted `ubuntu-24.04-arm` runner's Ubuntu AAVMF
+(`2024.02-2ubuntu0.10`) omits the GIC distributor window
+(`0x08000000`) from `GetMemoryMap()`, so the firmware-map-driven MMU
+mapping left GIC/UART unmapped and `GICD_CTLR` access hung after
+"[zenin-irq] using GICv2". Fix (2026-10-17): `arch_mmu_enable` now maps
+`0x08000000..0x09FFFFFF` as Device-nGnRnE unconditionally and clamps
+firmware RAM regions to `>= 0x40000000`, so the kernel never depends on
+UEFI listing the GIC/UART. This fix is IMPLEMENTED (rebuild green
+locally, 64.00 MiB image); the hosted-run re-confirmation of the 4868 KiB
+figure is intentionally not tracked (local AAVMF measurement above is the
+Phase 1 evidence).

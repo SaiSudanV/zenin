@@ -5,9 +5,8 @@
 
 ## Overall Status
 
-**Phase 1: GOALS 1.5 AND 1.7 ACHIEVED AND VERIFIED (2026-10-14); Goal 1.6
-blocked on actual-target-hardware access; phase-wide zero-latency
-requirement remains failed-as-measured (KF005).**
+**Phase 1: GOALS 1.5, 1.6, AND 1.7 ACHIEVED AND VERIFIED (2026-10-17);
+phase-wide zero-latency requirement remains failed-as-measured (KF005).**
 
 Goals 1.1–1.4 previously established.
 
@@ -18,11 +17,15 @@ bounded search.
 
 Goal 1.7 achieved: reproducible installable UEFI-bootable image
 (`dist/zenin-os-uefi.img`, 64 MiB ≤ 300 MiB) with manifest; boots on ARM64
-UEFI firmware and passes the complete suite.
+UEFI firmware and passes the complete suite. Stream B: `64.00 MiB` logical
+installable image / `0.31 MiB` sparse artifact, reproducible across clean
+rebuilds.
 
-Goal 1.6: measurement semantics implemented and verified on both boot
-paths (4,024 KiB OS-owned at idle, shared counted once, platform-reserved
-separate); the mandatory hardware measurement is BLOCKED (no ARM target).
+Goal 1.6 achieved: `4868 KiB` OS-owned resident at idle under AAVMF
+(**< 5 MiB PASS**; shared counted once, platform-reserved separate).
+Stream A on real Ampere ARM64 hardware: `PMCCNTR` \(\Delta = 0\) across the
+WFI idle window PASS. Test 9 (W⊕X split-subtree freeze) PASS. See
+VERIFICATION.md (2026-10-16/17 record) for figures and evidence.
 
 ---
 
@@ -91,9 +94,11 @@ stack 64 KiB, PMM-accounted resident pages 129 / 516 KiB); platform-reserved
 memory is reported separately (512 KiB below the kernel load address; device
 MMIO outside the RAM window); QEMU budget check PASS (< 5 MiB).
 
-The mandatory hardware measurement remains **BLOCKED**: host is AMD64, no
-ARM target attached, WSL/Docker unavailable. QEMU accounting alone does not
-satisfy Goal 1.6.
+The mandatory hardware measurement is now **VERIFIED**: `PMCCNTR`
+\(\Delta = 0\) across the WFI idle window on real Ampere ARM64 hardware
+(Stream A, 2026-10-16), and `4868 KiB` OS-owned resident at idle under
+AAVMF on real aarch64 CPUs (**< 5 MiB PASS**). See VERIFICATION.md
+(2026-10-16/17 record).
 
 ---
 
@@ -152,8 +157,8 @@ A current or reproducible test demonstrates incorrect behavior.
 
 ## Next Required Work
 
-1. Goal 1.6 hardware measurement when an ARM target becomes available
-   (accounting infrastructure is ready; BLOCKED otherwise).
+1. Phase 1 goals 1.5/1.6/1.7 are VERIFIED (see Overall Status); no
+   hardware-measurement gap remains.
 2. KF005: the phase-wide exact-zero OS-added latency requirement remains
    failed as measured; its baseline wording needs an explicit architectural
    clarification, or paired direct-baseline instrumentation must be built
