@@ -185,17 +185,19 @@ typedef struct {
 #define ZENIN_BOOT_INFO_MAGIC 0x5A454E49424F4F54ULL
 #define ZENIN_BOOT_INFO_MAX_REGIONS 64
 /* Layout: [header][ram[0..MAX)][mmio[0..MAX)] (fixed split, matches boot_info.h). */
-static u8 boot_info_storage[sizeof(zenin_boot_info_t) +
-                            2u * ZENIN_BOOT_INFO_MAX_REGIONS * sizeof(zenin_boot_range_t)];
+#define ZENIN_BOOT_INFO_BYTES (sizeof(zenin_boot_info_t) + \
+                               2u * ZENIN_BOOT_INFO_MAX_REGIONS * sizeof(zenin_boot_range_t))
 
 /* Build the boot-info from the firmware memory map: collect usable RAM regions
  * (conventional + loader/boot-services, reclaimable after ExitBootServices) as
  * RAM, and memory-mapped I/O / reserved ranges as device (MMIO) windows the
- * identity map must map as device memory. */
-static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
+ * identity map must map as device memory. Written into a caller-provided
+ * buffer (never the stub image — UEFI maps code sections R+X and faults on
+ * writes regardless of PE characteristics). */
+static void *build_boot_info(void *out, void *map, u64 map_size, u64 desc_size,
                              u64 kernel_start, u64 kernel_end) {
     dbg("ZENIN-EFI: build_boot_info\n");
-    zenin_boot_info_t *bi = (zenin_boot_info_t *)boot_info_storage;
+    zenin_boot_info_t *bi = (zenin_boot_info_t *)out;
     zenin_boot_range_t *regions = (zenin_boot_range_t *)(bi + 1);
     zenin_boot_range_t *mmio = regions + ZENIN_BOOT_INFO_MAX_REGIONS;
     bi->magic = ZENIN_BOOT_INFO_MAGIC;
@@ -228,7 +230,7 @@ static void *build_boot_info(void *map, u64 map_size, u64 desc_size,
         off += desc_size;
         iters++;
     }
-    return boot_info_storage;
+    return out;
 }
 
 efi_status efi_main(efi_handle image, efi_system_table *st) {
@@ -297,6 +299,11 @@ efi_status efi_main(efi_handle image, efi_system_table *st) {
     s = bs->allocate_pool(1u /* EfiLoaderData */, map_size, &map);
     if (s != EFI_SUCCESS) { dbg("ZENIN-EFI: alloc-pool err "); dbg_hex(s); return s; }
     u64 actual_map_size = 0;
+    /* Boot-info lives on the stub's stack, not in the image (UEFI maps code
+     * sections R+X and faults on writes regardless of PE flags). The kernel
+     * consumes it in arch_mmu_enable + kmain before pmm_init, and both run on
+     * the kernel's own stack — this frame is abandoned but not touched. */
+    u8 boot_info_buf[ZENIN_BOOT_INFO_BYTES];
     void *boot_info = NULL;
     for (int attempt = 0; attempt < 8; ++attempt) {
         u64 ms = map_size;
@@ -306,7 +313,7 @@ efi_status efi_main(efi_handle image, efi_system_table *st) {
         /* Build boot-info BEFORE ExitBootServices. The map buffer and the C
          * stack live in boot-services/loader memory that is reclaimed at exit,
          * so walking them afterwards reads reclaimed garbage and runs away. */
-        boot_info = build_boot_info(map, actual_map_size, desc_size,
+        boot_info = build_boot_info(boot_info_buf, map, actual_map_size, desc_size,
                                     EFI_LOAD_ADDRESS, EFI_LOAD_ADDRESS + image_size);
         s = bs->exit_boot_services(image, map_key);
         if (s == EFI_SUCCESS) break;

@@ -55,12 +55,19 @@ jobs:
           AAVMF=/usr/share/qemu-efi-aarch64/QEMU_EFI.fd
           # -m 3072 (3 GiB) differs from the QEMU -kernel 2 GiB default, so the
           # firmware GetMemoryMap / usable-RAM discovery is genuinely exercised.
-          timeout 300 qemu-system-aarch64 \
+          qemu-system-aarch64 \
             -M virt -cpu max $KVM -m 3072 \
             -bios "$AAVMF" \
             -drive file=dist/zenin-os-uefi.img,format=raw,if=virtio \
-            -display none -serial file:uefi_serial.log
-          echo "qemu-exit=$?"
+            -display none -serial file:uefi_serial.log &
+          QP=$!
+          # The kernel never powers off; kill QEMU the instant the smoke suite ends.
+          for i in $(seq 1 120); do
+            grep -aq "PASS: one timer IRQ" uefi_serial.log 2>/dev/null && break
+            sleep 1
+          done
+          kill $QP 2>/dev/null || true
+          echo "boot loop done"
 
       - name: Assert handoff chain + surface idle-RAM figure
         run: |
