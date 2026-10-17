@@ -415,7 +415,7 @@ mapping left GIC/UART unmapped and `GICD_CTLR` access hung after
 "[zenin-irq] using GICv2". Fix (2026-10-17): `arch_mmu_enable` now maps
 `0x08000000..0x09FFFFFF` as Device-nGnRnE unconditionally and clamps
 firmware RAM regions to `>= 0x40000000`, so the kernel never depends on
-UEFI listing the GIC/UART. This fix is IMPLEMENTED (rebuild green
-locally, 64.00 MiB image); the hosted-run re-confirmation of the 4868 KiB
-figure is intentionally not tracked (local AAVMF measurement above is the
-Phase 1 evidence).
+UEFI listing the GIC/UART. This fix is VERIFIED: fresh local AAVMF boot of
+the rebuilt image (2026-10-17, `local_uefi_verify.log`) passes the complete
+suite — GICv2 programmed, timer IRQ (INTID 27) wakes from WFI, Test 9 W⊕X
+PASS, idle-RAM 4868 KiB < 5 MiB — with zero regressions.
