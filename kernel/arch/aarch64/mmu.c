@@ -116,6 +116,11 @@ static void map_range(uint64_t base, uint64_t len, bool device) {
     uint64_t kernel_gib = (uint64_t)&__kernel_start & ~((uint64_t)0x3FFFFFFF);
     for (uint64_t va = base & ~((uint64_t)0x3FFFFFFF); va < end; va += (1ULL << 30)) {
         if (va == kernel_gib) continue; /* kernel_l2 owns this window (W^X) */
+        /* The low 1 GiB window is fixed platform device space (GIC 0x08000000,
+         * UART 0x09000000, ...). Never map it as normal RAM here — a firmware
+         * RAM region below 0x40000000 must not replace/populate it, or GIC/UART
+         * accesses fault (observed under Ubuntu AAVMF). low_device_l2 owns it. */
+        if (!device && va < 0x40000000ULL) continue;
         int i1 = l1_index(va);
         uint64_t window_lo = va, window_hi = va + (1ULL << 30);
         uint64_t cov_lo = base > window_lo ? base : window_lo;
@@ -386,7 +391,16 @@ void arch_mmu_enable(const zenin_boot_info_t *boot_info) {
         const zenin_boot_range_t *ram = zenin_boot_ram(boot_info);
         const zenin_boot_range_t *mmio = zenin_boot_mmio(boot_info);
         for (uint64_t i = 0; i < boot_info->ram_count; i++) {
-            map_range(ram[i].base, ram[i].pages << 12, false);
+            /* Never map firmware RAM below 1 GiB as normal memory: that range is
+             * the fixed device window (GIC 0x08000000, UART 0x09000000). */
+            uint64_t b = ram[i].base;
+            uint64_t n = ram[i].pages << 12;
+            if (b < 0x40000000ULL) {
+                if (b + n <= 0x40000000ULL) continue;
+                n = b + n - 0x40000000ULL;
+                b = 0x40000000ULL;
+            }
+            map_range(b, n, false);
         }
         for (uint64_t i = 0; i < boot_info->mmio_count; i++) {
             map_range(mmio[i].base, mmio[i].pages << 12, true);

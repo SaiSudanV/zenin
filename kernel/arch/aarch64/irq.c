@@ -61,6 +61,7 @@ bool zenin_irq_init(void) {
     } else {
         __asm__ volatile("msr vbar_el1, %0\nisb" : : "r"(vector_base) : "memory");
     }
+    __asm__ volatile("dsb ish\nisb" : : : "memory");
 
     timer_frequency = arch_get_counter_frequency();
     if (timer_frequency < 20) return false;
@@ -83,11 +84,6 @@ bool zenin_irq_init(void) {
     uart_put_dec(gic_field);
     uart_puts("; using GICv");
     uart_put_dec(gic_ver);
-    uart_puts("\n");
-    uart_puts("pre-gic gicd_ctlr=");
-    uart_put_hex(GICD_CTLR);
-    uart_puts(" gicc_ctlr=");
-    uart_put_hex(GICC_CTLR);
     uart_puts("\n");
     if (gic_ver == 3) {
         /* GICv3: system-register CPU interface + GICR redistributor. */
